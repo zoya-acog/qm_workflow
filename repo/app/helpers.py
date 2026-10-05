@@ -21,6 +21,7 @@ try:
         _runs_dir_for_cif,
         _write_summary_csv,
         _write_summary_json,
+        _validate_vdw_options,
     )
 except ModuleNotFoundError as exc:
     raise ModuleNotFoundError(
@@ -47,6 +48,15 @@ DEFAULTS = dict(
     qe_command="pw.x",
     kpoints=None,
     kpoint_separation=0.03,
+    input_dft=None,
+    vdw_corr=None,
+    xdm_a1=None,
+    xdm_a2=None,
+    ecutwfc=None,
+    ecutrho=None,
+    occupations=None,
+    smearing=None,
+    degauss=None,
     aggregate=False,
     summary_out=None,
     summary_json_out=None,
@@ -180,12 +190,26 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 .widget-button.mod-success { background:#2e7d32 !important; border-color:#2e7d32 !important; color:#fff !important; }
 .widget-button:hover { filter:brightness(1.05); }
 .widget-upload { border:1.5px dashed #c3cbd6; border-radius:8px; background:#fafbfc; }
+.advqm-file-panel { background:#fafbfc; border:1px dashed #c3cbd6; border-radius:8px;
+    padding:14px 16px; gap:10px; }
+.advqm-file-panel .widget-upload,
+.advqm-file-panel .widget-upload.widget-button,
+.advqm-file-panel .widget-upload .widget-button {
+    border:1px solid #0f56a4 !important; border-radius:8px !important;
+    background:#1565c0 !important; color:#fff !important; font-weight:700 !important;
+    min-height:46px !important; padding:10px 18px !important;
+    box-shadow:0 1px 3px rgba(21,101,192,0.22) !important;
+}
+.advqm-file-panel .widget-upload:hover,
+.advqm-file-panel .widget-upload.widget-button:hover,
+.advqm-file-panel .widget-upload .widget-button:hover { background:#0f56a4 !important; }
 .advqm-group-title { font-size:0.72rem; font-weight:700; letter-spacing:0.09em;
     text-transform:uppercase; color:#5b6472; margin:0 0 10px; }
 .widget-text .widget-label, .widget-int .widget-label,
 .widget-float .widget-label, .widget-dropdown .widget-label,
 .widget-checkbox, .widget-label { color:#475069; }
 .widget-accordion { border:none !important; background:transparent !important; }
+.advqm-section { margin-bottom:12px !important; }
 .widget-accordion .p-Collapse-header, .widget-accordion .lm-Widget.p-Accordion-title,
 .widget-accordion .widget-title { background:#f7f8fa !important; border-radius:8px !important;
     font-weight:600 !important; color:#475069 !important; }
@@ -262,6 +286,16 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 .advqm-table th:nth-child(5) { width:14%; }
 .advqm-table th:nth-child(6) { width:16%; }
 .advqm-table tr:hover td { background:#fafbfc; }
+.advqm-results-table { min-width:1120px; table-layout:auto; }
+.advqm-results-table th, .advqm-results-table td { white-space:normal; vertical-align:top; }
+.advqm-results-table th:nth-child(1) { min-width:130px; }
+.advqm-results-table th:nth-child(2) { min-width:110px; }
+.advqm-results-table th:nth-child(3) { min-width:220px; }
+.advqm-results-table th:nth-child(6) { min-width:150px; }
+.advqm-csv-download { display:inline-block; margin:4px 0 10px; padding:8px 14px;
+    border-radius:6px; background:#1565c0; color:#fff !important; font-weight:600;
+    text-decoration:none !important; }
+.advqm-csv-download:hover { background:#0f56a4; }
 .advqm-badge { display:inline-block; padding:3px 11px; border-radius:999px;
     font-size:0.72rem; font-weight:700; white-space:nowrap; }
 .advqm-badge-success { background:#e3f6e9; color:#1c7a3d; }

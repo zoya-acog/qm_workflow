@@ -32,7 +32,6 @@ RUN pip install --no-cache-dir \
         "ipyvue>=1.9,<2" \
         ipykernel \
         pandas \
-        matplotlib \
     && jupyter nbextension install --sys-prefix --py ipyvuetify --overwrite \
     && jupyter nbextension enable  --sys-prefix --py ipyvuetify \
     && jupyter nbextension install --sys-prefix --py widgetsnbextension --overwrite \

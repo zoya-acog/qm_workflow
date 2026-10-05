@@ -1,0 +1,101 @@
+####################################################################### 
+# 
+# This file contains crystal structure data downloaded from the 
+# Cambridge Structural Database (CSD) hosted by the Cambridge 
+# Crystallographic Data Centre (CCDC).
+# 
+# Full information about CCDC data access policies and citation 
+# guidelines are available at http://www.ccdc.cam.ac.uk/access/V1 
+# 
+# Audit and citation data items may have been added by the CCDC. 
+# Please retain this information to preserve the provenance of 
+# this file and to allow appropriate attribution of the data. 
+# 
+#######################################################################
+
+data_QAXMEH24
+#This CIF has been generated from an entry in the Cambridge Structural Database
+_database_code_depnum_ccdc_archive 'CCDC 1241883'
+_database_code_CSD               QAXMEH24
+loop_
+_citation_id
+_citation_doi
+_citation_year
+1 10.1021/ar100040r 2010
+2 10.1021/ja9930622 2000
+3 10.1021/jp013019c 2002
+_audit_creation_method           'Created from the CSD'
+_audit_update_record             
+;
+2026-06-04 downloaded from the CCDC.
+;
+_database_code_NBS               '737885 834251'
+_chemical_name_common            ROY
+_chemical_formula_moiety         'C12 H9 N3 O2 S1'
+_chemical_name_systematic        
+5-Methyl-2-((2-nitrophenyl)amino)-3-thiophenecarbonitrile
+_chemical_absolute_configuration unk
+_diffrn_ambient_temperature      295
+_exptl_crystal_density_diffrn    1.42816
+#These two values have been output from a single CSD field.
+_refine_ls_R_factor_gt           0.042
+_refine_ls_wR_factor_gt          0.042
+_diffrn_radiation_probe          x-ray
+_symmetry_cell_setting           monoclinic
+_symmetry_space_group_name_H-M   'P 21/c'
+_symmetry_Int_Tables_number      14
+_space_group_name_Hall           '-P 2ybc'
+loop_
+_symmetry_equiv_pos_site_id
+_symmetry_equiv_pos_as_xyz
+1 x,y,z
+2 -x,1/2+y,1/2-z
+3 -x,-y,-z
+4 x,1/2-y,1/2+z
+_cell_length_a                   3.9453(7)
+_cell_length_b                   18.685(1)
+_cell_length_c                   16.3948(4)
+_cell_angle_alpha                90
+_cell_angle_beta                 93.830(5)
+_cell_angle_gamma                90
+_cell_volume                     1205.89
+_exptl_crystal_colour            orange
+_exptl_crystal_description       needle
+_chemical_melting_point          '387.8 K'
+_cell_formula_units_Z            4
+_exptl_crystal_recrystallization_method 'benzyl alcohol solution'
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+S1 S 0.3532(2) 0.59815(4) 0.92898(4)
+O1 O 0.0952(8) 0.6870(1) 0.6321(1)
+O2 O 0.0098(7) 0.6165(1) 0.5305(1)
+N1 N 0.3973(6) 0.6428(1) 0.7692(1)
+N2 N 0.1323(6) 0.6283(1) 0.5996(1)
+N3 N 0.9053(8) 0.8029(1) 0.7895(2)
+C1 C 0.7808(7) 0.7645(1) 0.8326(2)
+C2 C 0.486(1) 0.6377(2) 1.0924(2)
+C3 C 0.4430(6) 0.5806(1) 0.7257(1)
+C4 C 0.3185(6) 0.5726(1) 0.6437(1)
+C5 C 0.3619(7) 0.5089(1) 0.6016(2)
+C6 C 0.5352(8) 0.4530(1) 0.6380(2)
+C7 C 0.6682(8) 0.4605(1) 0.7183(2)
+C8 C 0.6247(7) 0.5227(1) 0.7607(2)
+C9 C 0.4812(6) 0.6530(1) 0.8519(1)
+C10 C 0.6398(7) 0.7129(1) 0.8844(2)
+C11 C 0.6542(8) 0.7143(2) 0.9716(2)
+C12 C 0.5126(7) 0.6560(2) 1.0040(2)
+H1 H 0.305(8) 0.676(2) 0.739(2)
+H2 H 0.61992 0.66905 1.12734
+H3 H 0.56277 0.58939 1.10347
+H4 H 0.25451 0.64058 1.10716
+H5 H 0.26812 0.50458 0.54625
+H6 H 0.56661 0.40924 0.60842
+H7 H 0.79163 0.42088 0.74433
+H8 H 0.71943 0.52647 0.81637
+H9 H 0.75336 0.75267 1.00383
+
+#END

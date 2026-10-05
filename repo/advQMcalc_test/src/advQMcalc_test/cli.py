@@ -19,7 +19,7 @@ from advQMcalc_test.run_context import RunContext
 # ============================================================
 # RUN / CIF SELECTION
 # ============================================================
-def _select_run_dir(runs_dir: Path, run_id: str | None, run_path: str | None) -> Path:
+def _select_run_dir(runs_dir, run_id, run_path):
     if run_path is not None:
         chosen = Path(run_path)
         if not chosen.exists() or not chosen.is_dir():
@@ -42,8 +42,8 @@ def _select_run_dir(runs_dir: Path, run_id: str | None, run_path: str | None) ->
     return existing_runs[-1]
 
 
-def _collect_cif_paths(args: argparse.Namespace) -> list[Path]:
-    cif_paths: list[Path] = []
+def _collect_cif_paths(args):
+    cif_paths = []
 
     if args.cif:
         cif_paths.extend(Path(p) for p in args.cif)
@@ -54,8 +54,8 @@ def _collect_cif_paths(args: argparse.Namespace) -> list[Path]:
             raise ValueError(f"--cif-dir does not exist or is not a directory: {cif_dir}")
         cif_paths.extend(sorted(cif_dir.glob(args.cif_glob)))
 
-    out: list[Path] = []
-    seen: set[str] = set()
+    out = []
+    seen = set()
     for p in cif_paths:
         rp = str(p)
         if rp not in seen:
@@ -72,61 +72,44 @@ def _collect_cif_paths(args: argparse.Namespace) -> list[Path]:
     return out
 
 
-def _runs_dir_for_cif(base_runs_dir: Path, cif_path: Path, multi_mode: bool) -> Path:
-    return base_runs_dir / cif_path.stem if multi_mode else base_runs_dir
+def _runs_dir_for_cif(base_runs_dir, cif_path, multi_mode):
+    if multi_mode:
+        return base_runs_dir / cif_path.stem
+    return base_runs_dir
 
 
 # ============================================================
-# AGGREGATION HELPERS (Day 16)
+# AGGREGATION HELPERS
 # ============================================================
-def _iter_per_cif_runs(runs_dir: Path) -> list[tuple[str, Path]]:
-    """
-    Walk runs_dir and return a list of (cif_label, run_path) for each latest run.
-
-    Supports both:
-      multi-cif:  runs_dir / <cif_stem> / <timestamp>
-      single-cif: runs_dir / <timestamp>
-    """
+def _iter_per_cif_runs(runs_dir):
     if not runs_dir.exists():
         raise RuntimeError(f"Runs directory does not exist: {runs_dir}")
 
-    pairs: list[tuple[str, Path]] = []
+    pairs = []
 
     children = sorted([d for d in runs_dir.iterdir() if d.is_dir()])
     if not children:
         return pairs
 
-    # Heuristic: timestamp folders contain digits and an underscore
-    def looks_like_timestamp(d: Path) -> bool:
+    def looks_like_timestamp(d):
         name = d.name
         return any(ch.isdigit() for ch in name) and "_" in name
 
-    # If every child looks like a timestamp, this is a single-CIF runs_dir
     if all(looks_like_timestamp(d) for d in children):
-        latest = children[-1]
-        pairs.append((runs_dir.name, latest))
+        pairs.append((runs_dir.name, children[-1]))
         return pairs
 
-    # Otherwise treat each child as a per-CIF directory
     for cif_dir in children:
         runs = sorted([d for d in cif_dir.iterdir() if d.is_dir()])
         if not runs:
             continue
-        latest = runs[-1]
-        pairs.append((cif_dir.name, latest))
+        pairs.append((cif_dir.name, runs[-1]))
 
     return pairs
 
 
-def _aggregate_crystal_results(
-    runs_dir: Path,
-    only_successful: bool,
-) -> list[dict]:
-    """
-    Walk runs_dir and collect state.json (and crystal_result.json when present)
-    for each latest run, returning a list of summary rows.
-    """
-    rows: list[dict] = []
+def _aggregate_crystal_results(runs_dir, only_successful):
+    rows = []
 
     for cif_label, run_path in _iter_per_cif_runs(runs_dir):
         state_file = run_path / "state.json"
@@ -145,6 +128,7 @@ def _aggregate_crystal_results(
 
         qe_output_block = crystal.get("qe_output") or {}
         qe_results_block = crystal.get("qe_results") or {}
+        sys_params = crystal.get("system_params") or {}
 
         row = {
             "cif": state.get("cif") or cif_label,
@@ -153,6 +137,8 @@ def _aggregate_crystal_results(
             "slurm_state": crystal.get("slurm_state"),
             "job_id": crystal.get("job_id"),
             "kpoints": crystal.get("kpoints"),
+            "input_dft": sys_params.get("input_dft"),
+            "vdw_corr": sys_params.get("vdw_corr"),
             "pseudo_dir": crystal.get("pseudo_dir"),
             "qe_output_file": qe_output_block.get("qe_output_file"),
             "energy_ry": qe_results_block.get("energy_ry"),
@@ -165,7 +151,7 @@ def _aggregate_crystal_results(
     return rows
 
 
-def _write_summary_csv(rows: list[dict], out_path: Path) -> None:
+def _write_summary_csv(rows, out_path):
     columns = [
         "cif",
         "run_id",
@@ -173,6 +159,8 @@ def _write_summary_csv(rows: list[dict], out_path: Path) -> None:
         "slurm_state",
         "job_id",
         "kpoints",
+        "input_dft",
+        "vdw_corr",
         "pseudo_dir",
         "qe_output_file",
         "energy_ry",
@@ -188,7 +176,7 @@ def _write_summary_csv(rows: list[dict], out_path: Path) -> None:
             writer.writerow(row)
 
 
-def _write_summary_json(rows: list[dict], out_path: Path) -> None:
+def _write_summary_json(rows, out_path):
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(rows, indent=2))
 
@@ -196,7 +184,7 @@ def _write_summary_json(rows: list[dict], out_path: Path) -> None:
 # ============================================================
 # QE INPUT GENERATION
 # ============================================================
-def _generate_qe_input_with_cif2cell(crystal_dir: Path, staged_cif: Path, calc_type: str) -> Path:
+def _generate_qe_input_with_cif2cell(crystal_dir, staged_cif, calc_type):
     if not calc_type or str(calc_type).strip() == "":
         raise RuntimeError(f"Invalid calc_type='{calc_type}'")
 
@@ -242,22 +230,24 @@ def _generate_qe_input_with_cif2cell(crystal_dir: Path, staged_cif: Path, calc_t
 # ============================================================
 # PSEUDOPOTENTIAL / QE INPUT HELPERS
 # ============================================================
-def _canonicalize_element(sym: str) -> str:
+def _canonicalize_element(sym):
     if not sym:
         return sym
     s = sym.strip()
-    return s.upper() if len(s) == 1 else s[0].upper() + s[1:].lower()
+    if len(s) == 1:
+        return s.upper()
+    return s[0].upper() + s[1:].lower()
 
 
-def _atomic_write_text(path: Path, text: str) -> None:
+def _atomic_write_text(path, text):
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.write_text(text)
     os.replace(tmp_path, path)
 
 
-def _extract_atomic_species_elements(qe_text: str) -> list[str]:
+def _extract_atomic_species_elements(qe_text):
     lines = qe_text.splitlines()
-    elements: list[str] = []
+    elements = []
     in_block = False
 
     for line in lines:
@@ -304,20 +294,16 @@ def _extract_atomic_species_elements(qe_text: str) -> list[str]:
     return elements
 
 
-def _resolve_pseudo_filenames(
-    elements: list[str],
-    pseudo_dir: Path,
-    pp_map: dict[str, str] | None,
-) -> tuple[dict[str, str], dict[str, str]]:
-    canon_map: dict[str, str] = {}
+def _resolve_pseudo_filenames(elements, pseudo_dir, pp_map):
+    canon_map = {}
     if pp_map:
         for k, v in pp_map.items():
             canon_map[_canonicalize_element(k)] = v
 
     pp_files = [p.name for p in pseudo_dir.iterdir() if p.is_file()]
 
-    resolved: dict[str, str] = {}
-    sources: dict[str, str] = {}
+    resolved = {}
+    sources = {}
     for el in elements:
         if el in canon_map:
             resolved[el] = canon_map[el]
@@ -325,7 +311,7 @@ def _resolve_pseudo_filenames(
             continue
 
         el_lower = el.lower()
-        candidates: list[str] = []
+        candidates = []
         for name in pp_files:
             n_lower = name.lower()
             if not n_lower.endswith(".upf"):
@@ -337,8 +323,8 @@ def _resolve_pseudo_filenames(
             raise RuntimeError(f"No pseudopotential found for element '{el}' in {pseudo_dir}")
         if len(candidates) > 1:
             raise RuntimeError(
-                f"Multiple pseudopotentials found for element '{el}' in {pseudo_dir}: {sorted(candidates)}\n"
-                "Use --pp-map to specify which one to use."
+                f"Multiple pseudopotentials found for element '{el}' in {pseudo_dir}: "
+                f"{sorted(candidates)}\nUse --pp-map to specify which one to use."
             )
 
         resolved[el] = candidates[0]
@@ -355,23 +341,36 @@ def _resolve_pseudo_filenames(
     return resolved, sources
 
 
-def _extract_cell_lengths_from_cif(cif_path: Path) -> tuple[float, float, float]:
-    a = b = c = None
+def _extract_cell_lengths_from_cif(cif_path):
+    a = None
+    b = None
+    c = None
+
+    def _cif_float(raw, tag):
+        # CIF numeric values often carry standard uncertainties in
+        # parentheses (e.g. 5.1047(3)); strip them before float().
+        token = re.split(r"\s+", raw.strip())[-1]
+        match = re.match(r"^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)", token)
+        if not match:
+            raise RuntimeError(f"Could not parse {tag} value {token!r} from CIF: {cif_path}")
+        return float(match.group(1))
+
     for line in cif_path.read_text(errors="ignore").splitlines():
         stripped = line.strip()
         if stripped.startswith("_cell_length_a"):
-            a = float(re.split(r"\s+", stripped)[-1])
+            a = _cif_float(stripped, "_cell_length_a")
         elif stripped.startswith("_cell_length_b"):
-            b = float(re.split(r"\s+", stripped)[-1])
+            b = _cif_float(stripped, "_cell_length_b")
         elif stripped.startswith("_cell_length_c"):
-            c = float(re.split(r"\s+", stripped)[-1])
+            c = _cif_float(stripped, "_cell_length_c")
 
     if a is None or b is None or c is None:
         raise RuntimeError(f"Could not extract cell lengths a/b/c from CIF: {cif_path}")
+
     return a, b, c
 
 
-def _compute_kpoints_from_cif(cif_path: Path, separation: float) -> str:
+def _compute_kpoints_from_cif(cif_path, separation):
     a, b, c = _extract_cell_lengths_from_cif(cif_path)
     kp_x = max(int(1.0 / (a * separation) + 0.5), 1)
     kp_y = max(int(1.0 / (b * separation) + 0.5), 1)
@@ -379,9 +378,9 @@ def _compute_kpoints_from_cif(cif_path: Path, separation: float) -> str:
     return f"{kp_x} {kp_y} {kp_z} 0 0 0"
 
 
-def _replace_or_append_kpoints_block(text: str, kpoints: str) -> str:
+def _replace_or_append_kpoints_block(text, kpoints):
     lines = text.splitlines()
-    out_lines: list[str] = []
+    out_lines = []
     i = 0
     replaced = False
 
@@ -407,7 +406,128 @@ def _replace_or_append_kpoints_block(text: str, kpoints: str) -> str:
     return "\n".join(out_lines) + "\n"
 
 
-def _ensure_qe_required_sections(text: str, pseudo_dir_str: str, calc_type: str, kpoints: str) -> str:
+# ============================================================
+# &SYSTEM PARAMETER HANDLING
+# ============================================================
+def _format_qe_value(value):
+    if isinstance(value, bool):
+        return ".true." if value else ".false."
+    if isinstance(value, (int, float)):
+        return str(value)
+    return "'" + str(value) + "'"
+
+
+def _validate_vdw_options(args):
+    """
+    Return an error message string if the vdW option combination is invalid,
+    otherwise return None.
+    """
+    xdm_params_given = (args.xdm_a1 is not None) or (args.xdm_a2 is not None)
+
+    if args.vdw_corr is None and xdm_params_given:
+        return "--xdm-a1/--xdm-a2 require --vdw-corr XDM"
+
+    if (
+        args.vdw_corr is not None
+        and args.vdw_corr.strip().lower() != "xdm"
+        and xdm_params_given
+    ):
+        return (
+            "--xdm-a1/--xdm-a2 are only valid with --vdw-corr XDM "
+            f"(got --vdw-corr {args.vdw_corr})"
+        )
+
+    return None
+
+
+def _build_system_params(args):
+    """
+    Build the dict of &SYSTEM parameters from CLI args.
+
+    XDM parameters (xdm_a1, xdm_a2) are included ONLY when
+    --vdw-corr is XDM. For any other vdW correction they are dropped.
+    """
+    params = {}
+
+    if args.ecutwfc is not None:
+        params["ecutwfc"] = args.ecutwfc
+    if args.ecutrho is not None:
+        params["ecutrho"] = args.ecutrho
+    if args.input_dft is not None:
+        params["input_dft"] = args.input_dft
+    if args.occupations is not None:
+        params["occupations"] = args.occupations
+    if args.smearing is not None:
+        params["smearing"] = args.smearing
+    if args.degauss is not None:
+        params["degauss"] = args.degauss
+
+    if args.vdw_corr is not None:
+        params["vdw_corr"] = args.vdw_corr
+        if args.vdw_corr.strip().lower() == "xdm":
+            if args.xdm_a1 is not None:
+                params["xdm_a1"] = args.xdm_a1
+            if args.xdm_a2 is not None:
+                params["xdm_a2"] = args.xdm_a2
+
+    return params
+
+
+def _inject_system_parameters(text, params):
+    """
+    Insert or update key = value entries inside the &SYSTEM namelist.
+    Existing keys are replaced; new keys are inserted after the &SYSTEM header.
+    """
+    if not params:
+        return text
+
+    lines = text.splitlines()
+
+    header_idx = None
+    for i, line in enumerate(lines):
+        if line.strip().upper().startswith("&SYSTEM"):
+            header_idx = i
+            break
+
+    if header_idx is None:
+        raise RuntimeError(
+            "No &SYSTEM namelist found in QE input; cannot inject system parameters"
+        )
+
+    end_idx = None
+    for j in range(header_idx + 1, len(lines)):
+        if lines[j].strip() == "/":
+            end_idx = j
+            break
+
+    if end_idx is None:
+        raise RuntimeError("Malformed &SYSTEM namelist (no closing '/') in QE input")
+
+    for key, value in params.items():
+        new_line = "  " + key + " = " + _format_qe_value(value)
+
+        replaced = False
+        for j in range(header_idx + 1, end_idx):
+            stripped = lines[j].strip().lower()
+            if stripped.startswith(key.lower()):
+                remainder = stripped[len(key):].lstrip()
+                if remainder.startswith("="):
+                    lines[j] = new_line
+                    replaced = True
+                    break
+
+        if not replaced:
+            lines.insert(header_idx + 1, new_line)
+            end_idx += 1
+
+    out = "\n".join(lines)
+    if text.endswith("\n") and not out.endswith("\n"):
+        out += "\n"
+
+    return out
+
+
+def _ensure_qe_required_sections(text, pseudo_dir_str, calc_type, kpoints, system_params):
     new_text = text
     calculation_line = f"  calculation = '{calc_type}'"
     pseudo_dir_line = f"  pseudo_dir = '{pseudo_dir_str}'"
@@ -418,14 +538,18 @@ def _ensure_qe_required_sections(text: str, pseudo_dir_str: str, calc_type: str,
         if pseudo_dir_pattern.search(new_text):
             new_text = pseudo_dir_pattern.sub(pseudo_dir_line, new_text, count=1)
         else:
-            control_header_pattern = re.compile(r"^(\s*&CONTROL\s*\n)", flags=re.MULTILINE | re.IGNORECASE)
+            control_header_pattern = re.compile(
+                r"^(\s*&CONTROL\s*\n)", flags=re.MULTILINE | re.IGNORECASE
+            )
             new_text = control_header_pattern.sub(
                 lambda m: m.group(1) + calculation_line + "\n" + pseudo_dir_line + "\n",
                 new_text,
                 count=1,
             )
     else:
-        new_text = "&CONTROL\n" + calculation_line + "\n" + pseudo_dir_line + "\n/\n" + new_text
+        new_text = (
+            "&CONTROL\n" + calculation_line + "\n" + pseudo_dir_line + "\n/\n" + new_text
+        )
 
     electrons_pattern = re.compile(r"^\s*&ELECTRONS\b", flags=re.MULTILINE | re.IGNORECASE)
     if not electrons_pattern.search(new_text):
@@ -443,20 +567,18 @@ def _ensure_qe_required_sections(text: str, pseudo_dir_str: str, calc_type: str,
             flags=re.MULTILINE | re.IGNORECASE | re.DOTALL,
         )
         if system_block_pattern.search(new_text):
-            new_text = system_block_pattern.sub(lambda m: m.group(1) + "\n" + electrons_block, new_text, count=1)
+            new_text = system_block_pattern.sub(
+                lambda m: m.group(1) + "\n" + electrons_block, new_text, count=1
+            )
         else:
             new_text = electrons_block + new_text
+
+    new_text = _inject_system_parameters(new_text, system_params)
 
     return _replace_or_append_kpoints_block(new_text, kpoints)
 
 
-def _cleanup_qe_input(
-    qe_path: Path,
-    pseudo_dir: Path,
-    pp_map: dict[str, str] | None,
-    calc_type: str,
-    kpoints: str,
-) -> dict[str, object]:
+def _cleanup_qe_input(qe_path, pseudo_dir, pp_map, calc_type, kpoints, system_params):
     text = qe_path.read_text()
     elements = _extract_atomic_species_elements(text)
     if not elements:
@@ -465,7 +587,7 @@ def _cleanup_qe_input(
     pp_resolved, pp_sources = _resolve_pseudo_filenames(elements, pseudo_dir, pp_map)
     pseudo_dir_str = str(pseudo_dir.resolve())
 
-    new_lines: list[str] = []
+    new_lines = []
     in_species_block = False
     for line in text.splitlines():
         stripped = line.strip()
@@ -507,6 +629,7 @@ def _cleanup_qe_input(
                             continue
                         except ValueError:
                             pass
+
             new_lines.append(line)
             continue
 
@@ -516,7 +639,10 @@ def _cleanup_qe_input(
     if text.endswith("\n") and not new_text.endswith("\n"):
         new_text += "\n"
 
-    new_text = _ensure_qe_required_sections(new_text, pseudo_dir_str, calc_type, kpoints)
+    new_text = _ensure_qe_required_sections(
+        new_text, pseudo_dir_str, calc_type, kpoints, system_params
+    )
+
     _atomic_write_text(qe_path, new_text)
 
     return {
@@ -527,9 +653,9 @@ def _cleanup_qe_input(
 
 
 # ============================================================
-# SLURM SUBMISSION / MONITORING HELPERS
+# SLURM SUBMISSION / MONITORING
 # ============================================================
-def _submit_slurm_script(script_path: Path) -> tuple[str, str]:
+def _submit_slurm_script(script_path):
     result = subprocess.run(
         ["sbatch", script_path.name],
         cwd=script_path.parent,
@@ -549,10 +675,11 @@ def _submit_slurm_script(script_path: Path) -> tuple[str, str]:
     match = re.search(r"Submitted batch job\s+(\d+)", stdout)
     if not match:
         raise RuntimeError(f"Could not parse SLURM job ID from sbatch output:\n{stdout}")
+
     return match.group(1), stdout
 
 
-def _query_slurm_job(job_id: str) -> str:
+def _query_slurm_job(job_id):
     result = subprocess.run(
         ["sacct", "-j", str(job_id), "--format=State", "--noheader"],
         stdout=subprocess.PIPE,
@@ -562,7 +689,7 @@ def _query_slurm_job(job_id: str) -> str:
     if result.returncode != 0:
         raise RuntimeError(f"sacct failed for job {job_id}\nSTDERR:\n{result.stderr}")
 
-    states: list[str] = []
+    states = []
     for line in result.stdout.splitlines():
         s = line.strip()
         if not s:
@@ -579,13 +706,14 @@ def _query_slurm_job(job_id: str) -> str:
     for p in priority:
         if p in states:
             return p
+
     return states[0]
 
 
 # ============================================================
 # OUTPUT VALIDATION / ENERGY EXTRACTION
 # ============================================================
-def _inspect_crystal_outputs(run_ctx: RunContext, crystal_task: dict) -> dict[str, object]:
+def _inspect_crystal_outputs(run_ctx, crystal_task):
     qe_input_rel = crystal_task.get("qe_input")
     job_script_rel = crystal_task.get("job_script")
     if qe_input_rel is None:
@@ -598,7 +726,7 @@ def _inspect_crystal_outputs(run_ctx: RunContext, crystal_task: dict) -> dict[st
     qe_out_path = qe_input_path.with_suffix(".out")
     slurm_out_path = job_script_path.with_suffix(".slurm.out")
 
-    info: dict[str, object] = {
+    info = {
         "qe_output_file": str(qe_out_path),
         "qe_output_exists": qe_out_path.exists(),
         "qe_output_size": 0,
@@ -652,7 +780,7 @@ def _inspect_crystal_outputs(run_ctx: RunContext, crystal_task: dict) -> dict[st
     return info
 
 
-def _extract_qe_total_energy(crystal_task: dict) -> dict[str, object]:
+def _extract_qe_total_energy(crystal_task):
     qe_output = crystal_task.get("qe_output")
     if qe_output is None:
         raise RuntimeError("qe_output block missing from crystal task")
@@ -671,29 +799,43 @@ def _extract_qe_total_energy(crystal_task: dict) -> dict[str, object]:
         raise RuntimeError(f"Validated QE output file does not exist: {out_path}")
 
     text = out_path.read_text(errors="ignore")
-    matches = re.findall(r"^\s*!\s+total energy\s+=\s+([-+]?\d+\.\d+)\s+Ry", text, flags=re.MULTILINE)
+    matches = re.findall(
+        r"^\s*!\s+total energy\s+=\s+([-+]?\d+\.\d+)\s+Ry", text, flags=re.MULTILINE
+    )
     if not matches:
         raise RuntimeError(f"Could not find final total energy in QE output: {out_path}")
 
     energy_ry = float(matches[-1])
-    line_match = re.findall(r"^\s*!\s+total energy\s+=\s+[-+]?\d+\.\d+\s+Ry", text, flags=re.MULTILINE)
+    line_match = re.findall(
+        r"^\s*!\s+total energy\s+=\s+[-+]?\d+\.\d+\s+Ry", text, flags=re.MULTILINE
+    )
     energy_line = line_match[-1].strip() if line_match else None
-    return {"energy_ry": energy_ry, "energy_line": energy_line, "energy_source": qe_output.get("validation_source")}
+
+    return {
+        "energy_ry": energy_ry,
+        "energy_line": energy_line,
+        "energy_source": qe_output.get("validation_source"),
+    }
 
 
-def _write_crystal_result_file(run_ctx: RunContext, state: dict) -> Path:
+def _write_crystal_result_file(run_ctx, state):
     crystal = state["tasks"]["crystal"]
+    sys_params = crystal.get("system_params") or {}
+
     result_payload = {
         "cif": state.get("cif"),
         "calc_type": state.get("calc_type"),
         "kpoints": crystal.get("kpoints"),
+        "input_dft": sys_params.get("input_dft"),
+        "vdw_corr": sys_params.get("vdw_corr"),
         "pseudo_dir": crystal.get("pseudo_dir"),
         "job_id": crystal.get("job_id"),
         "slurm_state": crystal.get("slurm_state"),
         "crystal_status": crystal.get("status"),
-        "qe_output_file": crystal.get("qe_output", {}).get("qe_output_file"),
-        "energy_ry": crystal.get("qe_results", {}).get("energy_ry"),
+        "qe_output_file": (crystal.get("qe_output") or {}).get("qe_output_file"),
+        "energy_ry": (crystal.get("qe_results") or {}).get("energy_ry"),
     }
+
     result_path = run_ctx.run_dir / "results" / "crystal_result.json"
     result_path.write_text(json.dumps(result_payload, indent=2))
     return result_path
@@ -702,7 +844,7 @@ def _write_crystal_result_file(run_ctx: RunContext, state: dict) -> Path:
 # ============================================================
 # SINGLE-CIF WORKFLOW DRIVER
 # ============================================================
-def _process_single_cif(cif_path: Path, runs_dir: Path, args: argparse.Namespace) -> None:
+def _process_single_cif(cif_path, runs_dir, args):
     base_logger = setup_logger()
     config = WorkflowConfig(cif_path=cif_path, calc_type=args.calc_type)
 
@@ -736,7 +878,10 @@ def _process_single_cif(cif_path: Path, runs_dir: Path, args: argparse.Namespace
             "cif": str(config.cif_path),
             "calc_type": config.calc_type,
             "status": "initialized",
-            "tasks": {"crystal": {"status": "pending"}, "monomer": {"status": "pending"}},
+            "tasks": {
+                "crystal": {"status": "pending"},
+                "monomer": {"status": "pending"},
+            },
         }
         run_ctx.initialize(initial_state)
         run_ctx.create_layout()
@@ -774,12 +919,15 @@ def _process_single_cif(cif_path: Path, runs_dir: Path, args: argparse.Namespace
         logger.info(f"Using user-provided K_POINTS grid: {kpoints_to_use}")
     else:
         try:
-            kpoints_to_use = _compute_kpoints_from_cif(staged_cif_abs, args.kpoint_separation)
+            kpoints_to_use = _compute_kpoints_from_cif(
+                staged_cif_abs, args.kpoint_separation
+            )
         except Exception as e:
             logger.error(f"Failed to compute automatic K_POINTS from CIF: {e}")
             return
         logger.info(
-            f"Computed automatic K_POINTS from CIF with separation={args.kpoint_separation}: {kpoints_to_use}"
+            f"Computed automatic K_POINTS from CIF with "
+            f"separation={args.kpoint_separation}: {kpoints_to_use}"
         )
 
     state["tasks"]["crystal"]["kpoints"] = kpoints_to_use
@@ -797,16 +945,22 @@ def _process_single_cif(cif_path: Path, runs_dir: Path, args: argparse.Namespace
         staged_cif_abs = run_ctx.run_dir / crystal_task["staged_cif"]
         crystal_dir = run_ctx.run_dir / "inputs" / "crystal"
         try:
-            qe_in_path = _generate_qe_input_with_cif2cell(crystal_dir, staged_cif_abs, config.calc_type)
+            qe_in_path = _generate_qe_input_with_cif2cell(
+                crystal_dir, staged_cif_abs, config.calc_type
+            )
         except Exception as e:
             logger.error(str(e))
             return
-        state["tasks"]["crystal"]["qe_input"] = str(qe_in_path.relative_to(run_ctx.run_dir))
+        state["tasks"]["crystal"]["qe_input"] = str(
+            qe_in_path.relative_to(run_ctx.run_dir)
+        )
         state["tasks"]["crystal"]["status"] = "inputs_generated"
         run_ctx.save_state(state)
-        logger.info(f"Generated QE input via cif2cell: {qe_in_path.relative_to(run_ctx.run_dir)}")
+        logger.info(
+            f"Generated QE input via cif2cell: {qe_in_path.relative_to(run_ctx.run_dir)}"
+        )
 
-    # TASK 3: PSEUDOPOTENTIAL CLEANUP
+    # TASK 3: PSEUDOPOTENTIAL CLEANUP + SYSTEM PARAMETERS
     state = run_ctx.load_state()
     crystal_task = state.get("tasks", {}).get("crystal", {})
     if crystal_task.get("pp_cleanup_done") and not args.force_pp_cleanup:
@@ -823,7 +977,7 @@ def _process_single_cif(cif_path: Path, runs_dir: Path, args: argparse.Namespace
                 logger.error(f"--pseudo-dir is not a directory: {pseudo_dir}")
                 return
 
-            pp_map: dict[str, str] | None = None
+            pp_map = None
             if args.pp_map is not None:
                 pp_map_file = Path(args.pp_map)
                 if not pp_map_file.exists():
@@ -835,11 +989,15 @@ def _process_single_cif(cif_path: Path, runs_dir: Path, args: argparse.Namespace
                     logger.error(f"Failed to parse --pp-map JSON: {e}")
                     return
                 if not isinstance(loaded, dict):
-                    logger.error(f"--pp-map must be a JSON object (dict), got {type(loaded).__name__}")
+                    logger.error(
+                        f"--pp-map must be a JSON object (dict), got {type(loaded).__name__}"
+                    )
                     return
                 for k, v in loaded.items():
                     if not isinstance(k, str) or not isinstance(v, str):
-                        logger.error(f"--pp-map entries must be string -> string; got {k!r}: {v!r}")
+                        logger.error(
+                            f"--pp-map entries must be string -> string; got {k!r}: {v!r}"
+                        )
                         return
                 pp_map = loaded
 
@@ -849,8 +1007,17 @@ def _process_single_cif(cif_path: Path, runs_dir: Path, args: argparse.Namespace
                 return
             qe_in_abs = run_ctx.run_dir / qe_in_rel
 
+            system_params = _build_system_params(args)
+
             try:
-                cleanup_info = _cleanup_qe_input(qe_in_abs, pseudo_dir, pp_map, config.calc_type, kpoints_to_use)
+                cleanup_info = _cleanup_qe_input(
+                    qe_in_abs,
+                    pseudo_dir,
+                    pp_map,
+                    config.calc_type,
+                    kpoints_to_use,
+                    system_params,
+                )
             except Exception as e:
                 logger.error(f"Pseudopotential cleanup failed: {e}")
                 return
@@ -859,10 +1026,15 @@ def _process_single_cif(cif_path: Path, runs_dir: Path, args: argparse.Namespace
             state["tasks"]["crystal"]["pseudo_dir"] = cleanup_info["pseudo_dir"]
             state["tasks"]["crystal"]["pp_map_used"] = cleanup_info["pp_map_used"]
             state["tasks"]["crystal"]["pp_sources"] = cleanup_info["pp_sources"]
+            state["tasks"]["crystal"]["system_params"] = system_params
             run_ctx.save_state(state)
+
             logger.info(
-                f"Pseudopotential cleanup complete: map={cleanup_info['pp_map_used']} sources={cleanup_info['pp_sources']}"
+                f"Pseudopotential cleanup complete: "
+                f"map={cleanup_info['pp_map_used']} sources={cleanup_info['pp_sources']}"
             )
+            if system_params:
+                logger.info(f"Applied &SYSTEM parameters: {system_params}")
 
     # TASK 4: GENERATE CRYSTAL SLURM SCRIPT
     state = run_ctx.load_state()
@@ -886,17 +1058,23 @@ def _process_single_cif(cif_path: Path, runs_dir: Path, args: argparse.Namespace
         except Exception as e:
             logger.error(f"Failed to generate crystal SLURM script: {e}")
             return
-        state["tasks"]["crystal"]["job_script"] = str(slurm_path.relative_to(run_ctx.run_dir))
+        state["tasks"]["crystal"]["job_script"] = str(
+            slurm_path.relative_to(run_ctx.run_dir)
+        )
         state["tasks"]["crystal"]["job_script_generated"] = True
         state["tasks"]["crystal"]["status"] = "job_script_generated"
         run_ctx.save_state(state)
-        logger.info(f"Generated crystal SLURM script: {slurm_path.relative_to(run_ctx.run_dir)}")
+        logger.info(
+            f"Generated crystal SLURM script: {slurm_path.relative_to(run_ctx.run_dir)}"
+        )
 
     # TASK 5: SUBMIT CRYSTAL JOB
     state = run_ctx.load_state()
     crystal_task = state.get("tasks", {}).get("crystal", {})
     if crystal_task.get("job_id") is not None:
-        logger.info(f"Crystal job already submitted with job_id={crystal_task['job_id']}; skipping sbatch")
+        logger.info(
+            f"Crystal job already submitted with job_id={crystal_task['job_id']}; skipping sbatch"
+        )
     else:
         job_script_rel = crystal_task.get("job_script")
         if job_script_rel is None:
@@ -915,7 +1093,9 @@ def _process_single_cif(cif_path: Path, runs_dir: Path, args: argparse.Namespace
             logger.error(str(e))
             return
         state["tasks"]["crystal"]["job_id"] = job_id
-        state["tasks"]["crystal"]["submitted_at"] = datetime.now().isoformat(timespec="seconds")
+        state["tasks"]["crystal"]["submitted_at"] = datetime.now().isoformat(
+            timespec="seconds"
+        )
         state["tasks"]["crystal"]["job_submit_stdout"] = raw_stdout
         state["tasks"]["crystal"]["status"] = "submitted"
         run_ctx.save_state(state)
@@ -971,16 +1151,26 @@ def _process_single_cif(cif_path: Path, runs_dir: Path, args: argparse.Namespace
             "qe_error_markers": out_info["qe_error_markers"],
         }
 
-        if slurm_state == "COMPLETED" and out_info["qe_job_done"] and not out_info["qe_has_error"]:
+        if (
+            slurm_state == "COMPLETED"
+            and out_info["qe_job_done"]
+            and not out_info["qe_has_error"]
+        ):
             state["tasks"]["crystal"]["status"] = "qe_completed"
-            logger.info(f"Crystal output validation successful using {out_info['validation_source']}: JOB DONE found")
+            logger.info(
+                f"Crystal output validation successful using "
+                f"{out_info['validation_source']}: JOB DONE found"
+            )
         else:
             state["tasks"]["crystal"]["status"] = "qe_failed_validation"
             logger.info(
                 "Crystal output validation failed: "
-                f"slurm_state={slurm_state}, validation_source={out_info['validation_source']}, "
-                f"qe_output_exists={out_info['qe_output_exists']}, slurm_output_exists={out_info['slurm_output_exists']}, "
-                f"qe_job_done={out_info['qe_job_done']}, qe_has_error={out_info['qe_has_error']}"
+                f"slurm_state={slurm_state}, "
+                f"validation_source={out_info['validation_source']}, "
+                f"qe_output_exists={out_info['qe_output_exists']}, "
+                f"slurm_output_exists={out_info['slurm_output_exists']}, "
+                f"qe_job_done={out_info['qe_job_done']}, "
+                f"qe_has_error={out_info['qe_has_error']}"
             )
         run_ctx.save_state(state)
 
@@ -1022,43 +1212,61 @@ def _process_single_cif(cif_path: Path, runs_dir: Path, args: argparse.Namespace
             except Exception as e:
                 logger.error(f"Failed to write crystal result file: {e}")
                 return
-            logger.info(f"Wrote crystal result file: {written.relative_to(run_ctx.run_dir)}")
+            logger.info(
+                f"Wrote crystal result file: {written.relative_to(run_ctx.run_dir)}"
+            )
 
     logger.info("Configuration loaded successfully")
     logger.info(f"CIF path: {config.cif_path}")
     logger.info(f"Calc type: {config.calc_type}")
     logger.info(f"Current state: {run_ctx.load_state()['status']}")
-    logger.info("Day 16 complete: workflow + multi-CIF aggregation available")
+    logger.info("Workflow step complete")
+    return run_ctx.run_dir
 
 
 # ============================================================
-# MAIN ENTRYPOINT / MULTI-CIF DRIVER + AGGREGATION
+# MAIN ENTRYPOINT
 # ============================================================
-def main() -> None:
+def main():
     parser = argparse.ArgumentParser(
         prog="advQMcalc_test",
         description="Advanced QM calculator (single-CIF, multi-CIF, and aggregation modes)",
     )
+
     parser.add_argument("--version", action="store_true", help="Print version and exit")
     parser.add_argument("--cif", nargs="*", help="One or more CIF files")
     parser.add_argument("--cif-dir", default=None, help="Directory containing multiple CIF files")
-    parser.add_argument("--cif-glob", default="*.cif", help="Glob pattern used with --cif-dir (default: *.cif)")
-    parser.add_argument("--calc-type", default="scf", help="QE calculation type used for naming the generated input")
+    parser.add_argument(
+        "--cif-glob", default="*.cif", help="Glob pattern used with --cif-dir (default: *.cif)"
+    )
+    parser.add_argument(
+        "--calc-type", default="scf", help="QE calculation type (e.g. scf, relax, vc-relax)"
+    )
     parser.add_argument("--runs-dir", default="runs", help="Base directory for workflow runs")
     parser.add_argument("--log-name", default="advQMcalc.log", help="Run log filename")
-    parser.add_argument("--resume", action="store_true", help="Resume a run (single or multi-CIF)")
-    parser.add_argument("--run-id", default=None, help="Specific run directory name (single-CIF mode)")
-    parser.add_argument("--run-path", default=None, help="Full path to a specific run to resume (single-CIF mode)")
+    parser.add_argument("--resume", action="store_true", help="Resume a run")
+    parser.add_argument("--run-id", default=None, help="Specific run directory name (single-CIF)")
+    parser.add_argument("--run-path", default=None, help="Full path to a run to resume (single-CIF)")
     parser.add_argument("--pseudo-dir", default=None, help="Directory containing QE .UPF files")
-    parser.add_argument("--pp-map", default=None, help="Optional JSON file mapping elements to .UPF filenames")
-    parser.add_argument("--force-pp-cleanup", action="store_true", help="Force pseudopotential cleanup rerun")
-    parser.add_argument("--slurm-walltime", default="12:00:00", help="Walltime for generated crystal SLURM script")
-    parser.add_argument("--slurm-ntasks", type=int, default=8, help="Number of tasks for crystal SLURM script")
-    parser.add_argument("--qe-command", default="pw.x", help="QE executable used in the generated SLURM script")
+    parser.add_argument(
+        "--pp-map", default=None, help="Optional JSON file mapping elements to .UPF filenames"
+    )
+    parser.add_argument(
+        "--force-pp-cleanup", action="store_true", help="Force pseudopotential cleanup rerun"
+    )
+
+    parser.add_argument(
+        "--slurm-walltime", default="12:00:00", help="Walltime for crystal SLURM script"
+    )
+    parser.add_argument(
+        "--slurm-ntasks", type=int, default=8, help="Number of tasks for crystal SLURM script"
+    )
+    parser.add_argument("--qe-command", default="pw.x", help="QE executable in the SLURM script")
+
     parser.add_argument(
         "--kpoints",
         default=None,
-        help='K_POINTS grid to use, e.g. "3 3 2 0 0 0". If omitted, it is computed from the CIF.',
+        help='K_POINTS grid, e.g. "3 3 2 0 0 0". If omitted, computed from the CIF.',
     )
     parser.add_argument(
         "--kpoint-separation",
@@ -1067,22 +1275,37 @@ def main() -> None:
         help="Separation used for automatic k-point generation when --kpoints is omitted",
     )
 
-    # Day 16: aggregation options
+    # QE &SYSTEM options
+    parser.add_argument(
+        "--input-dft",
+        default=None,
+        help="DFT functional written as input_dft in &SYSTEM (e.g. b86bpbe, pbe)",
+    )
+    parser.add_argument(
+        "--vdw-corr",
+        default=None,
+        help="van der Waals correction written as vdw_corr in &SYSTEM (e.g. XDM, grimme-d3)",
+    )
+    parser.add_argument(
+        "--xdm-a1", type=float, default=None, help="XDM a1 parameter (only with --vdw-corr XDM)"
+    )
+    parser.add_argument(
+        "--xdm-a2", type=float, default=None, help="XDM a2 parameter (only with --vdw-corr XDM)"
+    )
+    parser.add_argument("--ecutwfc", type=float, default=None, help="Wavefunction cutoff (Ry)")
+    parser.add_argument("--ecutrho", type=float, default=None, help="Charge density cutoff (Ry)")
+    parser.add_argument("--occupations", default=None, help="e.g. smearing or fixed")
+    parser.add_argument("--smearing", default=None, help="e.g. gaussian")
+    parser.add_argument("--degauss", type=float, default=None, help="Smearing width (Ry)")
+
+    # Aggregation options
     parser.add_argument(
         "--aggregate",
         action="store_true",
         help="Aggregate per-CIF run results into a summary instead of running the workflow",
     )
-    parser.add_argument(
-        "--summary-out",
-        default=None,
-        help="Output CSV file for aggregation summary",
-    )
-    parser.add_argument(
-        "--summary-json-out",
-        default=None,
-        help="Output JSON file for aggregation summary",
-    )
+    parser.add_argument("--summary-out", default=None, help="Output CSV file for summary")
+    parser.add_argument("--summary-json-out", default=None, help="Output JSON file for summary")
     parser.add_argument(
         "--summary-only-successful",
         action="store_true",
@@ -1095,7 +1318,11 @@ def main() -> None:
         print(__version__)
         return
 
-    # ----- Day 16: aggregation branch (does NOT need --cif) -----
+    vdw_error = _validate_vdw_options(args)
+    if vdw_error is not None:
+        setup_logger().error(vdw_error)
+        return
+
     if args.aggregate:
         agg_logger = setup_logger()
         base_runs_dir = Path(args.runs_dir)
@@ -1132,7 +1359,6 @@ def main() -> None:
 
         return
 
-    # ----- Normal workflow path requires CIFs -----
     try:
         cif_paths = _collect_cif_paths(args)
     except ValueError as e:

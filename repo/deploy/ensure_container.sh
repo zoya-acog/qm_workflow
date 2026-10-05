@@ -42,10 +42,8 @@ docker run -d --name "$CONTAINER" \
   -v "/mnt/own6d/qe_workflow/data:/mnt/own6d/qe_workflow/data" \
   -v /run/munge:/run/munge \
   --user "7158:6006" -e HOME=/tmp \
-  --label hostname="qe_workflow.own3.aganitha.ai" \
   --label port="8866" --label user="zoya" \
   --label description="advQMcalc_test QM Crystal Workflow Voila" \
-  --label security=ldap \
   "$IMAGE"
 
 echo "[$(date -Is)] advqm-voila recreated"

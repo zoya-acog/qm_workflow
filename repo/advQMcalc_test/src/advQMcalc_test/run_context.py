@@ -105,6 +105,9 @@ class RunContext:
             set -e
 
             export LD_LIBRARY_PATH=/mnt/own6d/qe_workflow/data/qe_deps/lib:$LD_LIBRARY_PATH
+            # ponytail: retain the existing cluster-specific QE executable and
+            # paths; ceiling: the UI's qe_command field is ignored here. Upgrade
+            # by parameterizing this script with a validated qe_command value.
             PW_BIN=/mnt/own6d/qe_workflow/data/qe-7.2-install/bin/pw.x
 
             infile=$(basename "{qe_input_path.name}" .in)

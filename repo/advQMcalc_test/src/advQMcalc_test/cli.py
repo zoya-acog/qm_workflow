@@ -440,6 +440,23 @@ def _validate_vdw_options(args):
     return None
 
 
+def _validate_gpu_options(args):
+    """Return an error message if the GPU options are invalid, else None."""
+    from .run_context import GPU_IMAGE_TAR
+
+    if not args.gpu:
+        from .run_context import CPU_IMAGE_TAR
+
+        if not Path(CPU_IMAGE_TAR).exists():
+            return f"CPU QE image archive is missing: {CPU_IMAGE_TAR}"
+        return None
+    if args.gpus < 1:
+        return "--gpus must be >= 1"
+    if not Path(GPU_IMAGE_TAR).exists():
+        return f"GPU run requested but the GPU QE image archive is missing: {GPU_IMAGE_TAR}"
+    return None
+
+
 def _build_system_params(args):
     """
     Build the dict of &SYSTEM parameters from CLI args.
@@ -1053,11 +1070,18 @@ def _process_single_cif(cif_path, runs_dir, args):
                 job_name=job_name,
                 walltime=args.slurm_walltime,
                 ntasks=args.slurm_ntasks,
+                mem_per_cpu=args.slurm_mem_per_cpu,
                 qe_command=args.qe_command,
+                gpu=args.gpu,
+                gpu_type=args.gpu_type,
+                gpus=args.gpus,
             )
         except Exception as e:
             logger.error(f"Failed to generate crystal SLURM script: {e}")
             return
+        state["tasks"]["crystal"]["gpu"] = (
+            {"type": args.gpu_type or "any", "count": args.gpus} if args.gpu else None
+        )
         state["tasks"]["crystal"]["job_script"] = str(
             slurm_path.relative_to(run_ctx.run_dir)
         )
@@ -1261,6 +1285,14 @@ def main():
     parser.add_argument(
         "--slurm-ntasks", type=int, default=8, help="Number of tasks for crystal SLURM script"
     )
+    parser.add_argument(
+        "--slurm-mem-per-cpu", default="4G", help="Memory per CPU for the SLURM script, e.g. 8G"
+    )
+    parser.add_argument("--gpu", action="store_true", help="Run QE on GPU (pgpu partition)")
+    parser.add_argument(
+        "--gpu-type", default=None, help="GPU gres type, e.g. nvidia_geforce_rtx_4090"
+    )
+    parser.add_argument("--gpus", type=int, default=1, help="GPUs per job (one MPI rank each)")
     parser.add_argument("--qe-command", default="pw.x", help="QE executable in the SLURM script")
 
     parser.add_argument(
@@ -1321,6 +1353,11 @@ def main():
     vdw_error = _validate_vdw_options(args)
     if vdw_error is not None:
         setup_logger().error(vdw_error)
+        return
+
+    gpu_error = _validate_gpu_options(args)
+    if gpu_error is not None:
+        setup_logger().error(gpu_error)
         return
 
     if args.aggregate:

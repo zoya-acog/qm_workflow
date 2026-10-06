@@ -34,8 +34,19 @@ def _nav_button(label: str) -> widgets.Button:
     return b
 
 
+# 1 Ry = 13.605693122994 eV; 1 eV = 96.48533212331002 kJ/mol.
+RY_TO_KJ_MOL = 13.605693122994 * 96.48533212331002
+
+
+def ry_to_kj_mol(v):
+    """Convert an energy in Ry to kJ/mol (None if not numeric)."""
+    return v * RY_TO_KJ_MOL if isinstance(v, (int, float)) else None
+
+
 def _fmt_energy(v) -> str:
-    return f"{v:.4f}" if isinstance(v, (int, float)) else "–"
+    """Format a QE energy (stored in Ry) for display in kJ/mol."""
+    kj = ry_to_kj_mol(v)
+    return f"{kj:,.2f}" if kj is not None else "–"
 
 
 # Display names for calculation types; the backend keeps the original keys.

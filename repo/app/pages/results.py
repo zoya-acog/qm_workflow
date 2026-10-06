@@ -13,7 +13,7 @@ import ipyvuetify as ipv
 from IPython.display import HTML, display
 
 from helpers import load_run_state
-from shared import DEFAULT_RUNS_DIR, _Nav, _fmt, _list_all_run_rows
+from shared import DEFAULT_RUNS_DIR, RY_TO_KJ_MOL, _Nav, _fmt, _list_all_run_rows, ry_to_kj_mol
 
 
 def _cif_result_metadata(row: dict) -> dict[str, str | None]:
@@ -169,7 +169,6 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
 
         # ponytail: normalize each QE cell to formula units before comparison;
         # ceiling: complex/disordered formulas may not parse, so show no ΔE.
-        ry_to_kj_mol = 13.605693122994 * 96.48533212331002
         row_data = []
         for row in rows:
             metadata = _cif_result_metadata(row)
@@ -199,7 +198,7 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
         min_energy = min(item["per_formula_energy"] for item in row_data) if can_compare else None
         columns = [
             "CIF name", "Space group", "Cell parameters", "K-points",
-            "Energy (Ry)", "Relative energy (kJ/mol)", "SLURM state", "SLURM job id",
+            "Energy (kJ/mol)", "Relative energy (kJ/mol)", "SLURM state", "SLURM job id",
         ]
         csv_buffer = io.StringIO(newline="")
         writer = csv.writer(csv_buffer)
@@ -210,7 +209,7 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
             metadata = item["metadata"]
             energy = row.get("energy_ry")
             relative = (
-                (item["per_formula_energy"] - min_energy) * ry_to_kj_mol
+                (item["per_formula_energy"] - min_energy) * RY_TO_KJ_MOL
                 if can_compare
                 else None
             )
@@ -219,7 +218,7 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
                 metadata["space_group"],
                 metadata["cell_parameters"],
                 row.get("kpoints") or "–",
-                f"{float(energy):.6f}" if isinstance(energy, (int, float)) else "–",
+                f"{ry_to_kj_mol(float(energy)):.4f}" if isinstance(energy, (int, float)) else "–",
                 f"{relative:.4f}" if relative is not None else "–",
                 row.get("slurm_state") or "–",
                 row.get("job_id") or "–",

@@ -22,6 +22,7 @@ try:
         _write_summary_csv,
         _write_summary_json,
         _validate_vdw_options,
+        _validate_gpu_options,
     )
 except ModuleNotFoundError as exc:
     raise ModuleNotFoundError(
@@ -45,7 +46,11 @@ DEFAULTS = dict(
     force_pp_cleanup=False,
     slurm_walltime="12:00:00",
     slurm_ntasks=8,
+    slurm_mem_per_cpu="4G",
     qe_command="pw.x",
+    gpu=False,
+    gpu_type=None,
+    gpus=1,
     kpoints=None,
     kpoint_separation=0.03,
     input_dft=None,
@@ -422,6 +427,7 @@ __all__ = [
     "_process_single_cif",
     "_aggregate_crystal_results",
     "_query_slurm_job",
+    "_validate_gpu_options",
     "_runs_dir_for_cif",
     "_write_summary_csv",
     "_write_summary_json",

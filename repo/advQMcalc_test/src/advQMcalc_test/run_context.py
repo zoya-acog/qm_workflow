@@ -7,6 +7,14 @@ from shutil import copy2
 from textwrap import dedent
 
 
+CPU_IMAGE = "advqm-qe-cpu:7.2"
+CPU_IMAGE_TAR = "/mnt/own6d/qe_workflow/data/gpu-build/advqm-qe-cpu-7.2.tar"
+GPU_IMAGE = "advqm-qe-gpu:7.3.1"
+GPU_IMAGE_TAR = "/mnt/own6d/qe_workflow/data/gpu-build/advqm-qe-gpu-7.3.1.tar"
+DATA_ROOT = "/mnt/own6d/qe_workflow/data"
+
+
+
 class RunContext:
     """
     Represents a single workflow run.
@@ -72,6 +80,9 @@ class RunContext:
         nodes: int = 1,
         mem_per_cpu: str = "4G",
         qe_command: str = "pw.x",
+        gpu: bool = False,
+        gpu_type: str | None = None,
+        gpus: int = 1,
     ) -> Path:
         """
         Write a SLURM script for the crystal QE calculation.
@@ -89,26 +100,75 @@ class RunContext:
         slurm_out_path = (script_path.parent / f"{job_name}.slurm.out").resolve()
         input_dir = qe_input_path.parent.resolve()
 
+        pad = " " * 12  # keeps multi-line inserts aligned for dedent()
+        # QE always runs from a docker image (DevOps policy: containers only).
+        # Paths are mounted at identical locations so the generated QE input
+        # (pseudo_dir, outdir) works unchanged, and MPI runs inside the
+        # container as one job (plain `srun pw.x` gave uncoordinated copies).
+        if gpu:
+            image, image_tar = GPU_IMAGE, GPU_IMAGE_TAR
+            gres = f"gpu:{gpu_type}:{gpus}" if gpu_type else f"gpu:{gpus}"
+            partition_line = "#SBATCH --partition=pgpu"
+            # own3: GTX 1080 Ti (cc6.1) has no kernels in the GPU image.
+            # own10: our user is not in the docker group there.
+            nodelist_line = f"#SBATCH --gres={gres}\n{pad}#SBATCH --exclude=own3,own10"
+            cpus_per_task = 4
+            ntasks = gpus
+            device_arg = "--device nvidia.com/gpu=all "
+            mpi_cmd = f"mpirun -np {gpus} pw.x -nk {gpus}"
+            kind = "GPU"
+        else:
+            image, image_tar = CPU_IMAGE, CPU_IMAGE_TAR
+            partition_line = "#SBATCH --partition=pzero"
+            nodelist_line = "#SBATCH --nodelist=own9"
+            cpus_per_task = 1
+            device_arg = ""
+            mpi_cmd = f"mpirun --bind-to none -np {ntasks} pw.x"
+            kind = "CPU"
+        pw_bin = "pw.x"  # QE comes from the image
+        env_lines = "\n".join(
+            [
+                "export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK",
+                f'IMG="{image}"',
+                "# Load the image on this node once (flock: one loader per node).",
+                'if ! docker image inspect "$IMG" >/dev/null 2>&1; then',
+                f"    flock /tmp/advqm_docker_load.lock sh -c 'docker image inspect {image} >/dev/null 2>&1 || docker load -i {image_tar}'",
+                "fi",
+            ]
+        ).replace("\n", "\n" + pad)
+        launch = "\n".join(
+            [
+                f"docker run --rm {device_arg}\\",
+                '    --label user="$(id -un)" \\',
+                f'    --label description="advQMcalc_test QE {kind} job ($SLURM_JOB_NAME)" \\',
+                "    --label security=ldap \\",
+                '    --user "$(id -u):$(id -g)" -e HOME=/tmp -e OMP_NUM_THREADS \\',
+                f'    -v {DATA_ROOT}:{DATA_ROOT} -v "$localscratch:$localscratch" \\',
+                '    -w "$workdir" "$IMG" \\',
+                f'    {mpi_cmd} -i "$infile.in" > "$infile.out"',
+            ]
+        ).replace("\n", "\n" + pad)
+
         script_text = dedent(
             f"""\
             #!/bin/bash
             #SBATCH --job-name={job_name}
             #SBATCH --output={slurm_out_path}
-            #SBATCH --partition=pzero
+            {partition_line}
             #SBATCH --nodes={nodes}
-            #SBATCH --nodelist=own9
-            #SBATCH --cpus-per-task=1
+            {nodelist_line}
+            #SBATCH --cpus-per-task={cpus_per_task}
             #SBATCH --ntasks={ntasks}
             #SBATCH --mem-per-cpu={mem_per_cpu}
             #SBATCH --time={walltime}
 
             set -e
 
-            export LD_LIBRARY_PATH=/mnt/own6d/qe_workflow/data/qe_deps/lib:$LD_LIBRARY_PATH
+            {env_lines}
             # ponytail: retain the existing cluster-specific QE executable and
             # paths; ceiling: the UI's qe_command field is ignored here. Upgrade
             # by parameterizing this script with a validated qe_command value.
-            PW_BIN=/mnt/own6d/qe_workflow/data/qe-7.2-install/bin/pw.x
+            PW_BIN={pw_bin}
 
             infile=$(basename "{qe_input_path.name}" .in)
             indir="{input_dir}"
@@ -151,8 +211,12 @@ class RunContext:
             # closing "/" (matched via awk, not sed, since a QE input has
             # several bare "/" lines — one per namelist — and only this one
             # is unambiguous: it's the first bare "/" after &ELECTRONS opens).
+            # vc-relax additionally needs a &CELL namelist (QE otherwise
+            # fails with: bad line in namelist &cell).
+            vc=0
+            if grep -q "calculation = 'vc-relax'" "$infile.in"; then vc=1; fi
             if grep -qE "calculation = '(vc-)?relax'" "$infile.in" && ! grep -q "&IONS" "$infile.in"; then
-                awk '
+                awk -v vc="$vc" '
                     /&ELECTRONS/ {{ in_electrons=1 }}
                     in_electrons && /^\/$/ {{
                         print
@@ -160,6 +224,12 @@ class RunContext:
                         print "&IONS"
                         print "  ion_dynamics = '"'"'bfgs'"'"'"
                         print "/"
+                        if (vc == 1) {{
+                            print ""
+                            print "&CELL"
+                            print "  cell_dynamics = '"'"'bfgs'"'"'"
+                            print "/"
+                        }}
                         in_electrons=0
                         next
                     }}
@@ -167,7 +237,7 @@ class RunContext:
                 ' "$infile.in" > "$infile.in.tmp" && mv "$infile.in.tmp" "$infile.in"
             fi
 
-            srun "$PW_BIN" -i "$infile.in" > "$infile.out"
+            {launch}
             rm -rf "$localscratch"
             cp "$infile.out" "$indir"
             """

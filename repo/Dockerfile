@@ -45,4 +45,4 @@ RUN chmod -R 777 /srv
 
 ENV SLURM_CONF=/srv/app/slurm.conf
 
-CMD ["voila", "--port=8866", "--Voila.ip=0.0.0.0", "--no-browser", "--autoreload=False", "app/app.ipynb"]
+CMD ["voila", "--port=8866", "--Voila.ip=0.0.0.0", "--no-browser", "--autoreload=False", "--VoilaConfiguration.enable_nbextensions=True", "app/app.ipynb"]

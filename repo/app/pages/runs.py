@@ -33,7 +33,7 @@ from shared import (
 _ROW_COL_WIDTHS = ["20%", "12%", "9%", "12%", "13%", "14%", "12%", "8%"]
 
 
-_ROW_COL_LABELS = ["Cif file", "Run id", "Job id", "Calculation type", "Energy (ry)", "Status", "", ""]
+_ROW_COL_LABELS = ["Cif file", "Run id", "Job id", "Calculation type", "Energy (kJ/mol)", "Status", "", ""]
 
 
 def _run_row_widget(r: dict, on_open, on_load_results) -> widgets.HBox:
@@ -178,9 +178,13 @@ def _build_runs_page(nav: _Nav):
                 ("Pseudopotential Dir", _fmt(crystal.get("pseudo_dir"))),
                 ("DFT Functional", _fmt((crystal.get("system_params") or {}).get("input_dft"))),
                 ("vdW Correction", _fmt((crystal.get("system_params") or {}).get("vdw_corr"))),
+                ("GPU", _fmt(
+                    f'{crystal["gpu"]["count"]} x {crystal["gpu"]["type"]}'
+                    if crystal.get("gpu") else "No"
+                )),
                 ("Submitted At", _fmt(crystal.get("submitted_at"))),
                 ("Submitted By", _fmt(st.get("submitted_by"))),
-                ("Energy (Ry)", _fmt_energy(qe_results.get("energy_ry"))),
+                ("Energy (kJ/mol)", _fmt_energy(qe_results.get("energy_ry"))),
                 ("JOB DONE seen", _fmt(qe_output.get("qe_job_done"))),
                 ("Error markers found", _fmt(", ".join(error_markers)) if error_markers else "None"),
             ]

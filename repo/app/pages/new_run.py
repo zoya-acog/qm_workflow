@@ -11,6 +11,7 @@ from helpers import (
     UPLOAD_DIR,
     _process_single_cif,
     _runs_dir_for_cif,
+    _validate_gpu_options,
     _validate_vdw_options,
     build_namespace,
     attach_log_handler,
@@ -70,7 +71,30 @@ def _build_new_run_page(nav: _Nav):
     )
     walltime_w = ipv.TextField(label="Walltime", v_model="12:00:00", outlined=True, dense=True)
     ntasks_w = ipv.TextField(label="Tasks", v_model="8", outlined=True, dense=True)
+    mem_w = ipv.TextField(label="Memory per CPU (GB)", v_model="4", outlined=True, dense=True,
+                          placeholder="e.g. 4 (use 8+ for >100 atoms)")
     qe_cmd_w = ipv.TextField(label="QE Command", v_model="pw.x", outlined=True, dense=True)
+    use_gpu_w = ipv.Checkbox(label="Use GPU", v_model=False, dense=True)
+    gpu_type_w = ipv.Select(
+        label="GPU Type",
+        items=[
+            {"text": "Any", "value": ""},
+            {"text": "RTX 4090", "value": "nvidia_geforce_rtx_4090"},
+            {"text": "RTX 5080", "value": "nvidia_geforce_rtx_5080"},
+        ],
+        v_model="", outlined=True, dense=True, disabled=True,
+    )
+    gpus_w = ipv.TextField(label="GPUs (one MPI rank each)", v_model="1",
+                           outlined=True, dense=True, disabled=True)
+
+    def on_gpu_toggle(change) -> None:
+        # Tasks is fixed to the GPU count (one MPI rank per GPU) in GPU mode.
+        on = bool(change["new"])
+        gpu_type_w.disabled = not on
+        gpus_w.disabled = not on
+        ntasks_w.disabled = on
+
+    use_gpu_w.observe(on_gpu_toggle, names="v_model")
     submitted_by_w = ipv.TextField(label="Submitted By *", v_model="",
                                      placeholder="Your name/initials", outlined=True, dense=True)
     input_dft_w = ipv.TextField(label="DFT Functional", v_model="",
@@ -151,7 +175,11 @@ def _build_new_run_page(nav: _Nav):
         pp_map_w.v_model = ""
         walltime_w.v_model = "12:00:00"
         ntasks_w.v_model = "8"
+        mem_w.v_model = "4"
         qe_cmd_w.v_model = "pw.x"
+        use_gpu_w.v_model = False
+        gpu_type_w.v_model = ""
+        gpus_w.v_model = "1"
         force_pp_w.value = False
         submitted_by_w.v_model = ""
         vdw_corr_w.v_model = None
@@ -215,6 +243,10 @@ def _build_new_run_page(nav: _Nav):
             multi = True
         try:
             ntasks_val = int(ntasks_w.v_model)
+            mem_gb = float(mem_w.v_model)
+            if mem_gb <= 0:
+                raise ValueError("Memory per CPU must be positive")
+            gpus_val = int(gpus_w.v_model or 1)
             kpoints_value = (kpoints_w.v_model or "").strip()
             ksep_text = (ksep_w.v_model or "").strip()
             if kpoints_value:
@@ -263,7 +295,11 @@ def _build_new_run_page(nav: _Nav):
             pp_map=(pp_map_w.v_model or "").strip() or None,
             slurm_walltime=walltime_w.v_model,
             slurm_ntasks=ntasks_val,
+            slurm_mem_per_cpu=f"{mem_gb:g}G",
             qe_command=qe_cmd_w.v_model,
+            gpu=bool(use_gpu_w.v_model),
+            gpu_type=(gpu_type_w.v_model or None),
+            gpus=gpus_val,
             kpoints=kpoints_value or None,
             kpoint_separation=ksep_val,
             input_dft=(input_dft_w.v_model or "").strip() or None,
@@ -276,6 +312,12 @@ def _build_new_run_page(nav: _Nav):
         vdw_error = _validate_vdw_options(build_namespace(**common))
         if vdw_error:
             _run_log(vdw_error)
+            run_btn.disabled = False
+            return
+
+        gpu_error = _validate_gpu_options(build_namespace(**common))
+        if gpu_error:
+            _run_log(gpu_error)
             run_btn.disabled = False
             return
 
@@ -416,6 +458,8 @@ def _build_new_run_page(nav: _Nav):
     slurm_card = widgets.VBox(
         [
             _ipv_row(walltime_w, ntasks_w, qe_cmd_w),
+            _ipv_row(mem_w),
+            _ipv_row(use_gpu_w, gpu_type_w, gpus_w),
         ]
     )
     slurm_card.add_class("advqm-card")

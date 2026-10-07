@@ -1,5 +1,6 @@
 """Runs monitoring table with monitor/resume support."""
 
+import html
 import threading
 from pathlib import Path
 
@@ -17,6 +18,11 @@ from helpers import (
 )
 from shared import (
     CALC_TYPE_LABELS,
+    batch_status_html,
+    cif_list_text,
+    group_cif_names,
+    group_rows,
+    labeled_field,
     _Nav,
     _SYSTEM_PARAM_KEYS,
     _effective_status_html,
@@ -30,40 +36,61 @@ from shared import (
 )
 
 
-_ROW_COL_WIDTHS = ["20%", "12%", "9%", "12%", "13%", "14%", "12%", "8%"]
+_ROW_COL_WIDTHS = ["10%", "16%", "20%", "18%", "12%", "12%", "5%", "7%"]
 
 
-_ROW_COL_LABELS = ["Cif file", "Run id", "Job id", "Calculation type", "Energy (kJ/mol)", "Status", "", ""]
+_ROW_COL_LABELS = ["Job ID", "Run ID", "CIF File", "Path", "Calculation Type", "Status", "", ""]
 
 
-def _run_row_widget(r: dict, on_open, on_load_results) -> widgets.HBox:
-    cif_path = r.get("cif")
-    cif_name = Path(cif_path).name if cif_path else _fmt(cif_path)
+def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:
+    """One table row: a single run, or one multi-CIF batch (rows sharing an array job)."""
+    first = rows[0]
+    batch = len(rows) > 1
+    group_row = {**first, "batch_rows": rows} if batch else first
+
+    names = group_cif_names(rows)
+    cif_text = cif_list_text(names)
     cif_html = widgets.HTML(
-        f'<span title="{_fmt(cif_path)}">{cif_name}</span>',
-        layout=widgets.Layout(width=_ROW_COL_WIDTHS[0]),
+        f'<span title="{html.escape(", ".join(names))}">{html.escape(cif_text)}</span>',
+        layout=widgets.Layout(width=_ROW_COL_WIDTHS[2]),
     )
     cif_html.add_class("advqm-rowcell-cif")
+
+    job_id = first.get("array_job_id") if batch else first.get("job_id")
+    label = first.get("run_label")
+    run_id_text = label or (
+        f"{first.get('run_id')} (+{len(rows) - 1} more)" if batch else first.get("run_id")
+    )
+    cif_dir = first.get("cif_dir")
+
     open_btn = widgets.Button(
-        icon="wrench", tooltip="Monitor & Resume this run",
+        icon="wrench", tooltip="Monitor & Resume this run" if not batch else "Monitor & Resume all runs in this batch",
         layout=widgets.Layout(width=_ROW_COL_WIDTHS[6]),
     )
-    open_btn.on_click(lambda _b, row=r: on_open(row))
-    is_finished = status_category(r.get("crystal_status")) == "success"
+    open_btn.on_click(lambda _b, row=group_row: on_open(row))
+    finished = [r for r in rows if status_category(r.get("crystal_status")) == "success"]
     load_results_btn = widgets.Button(
         description="Load Results", icon="line-chart",
-        disabled=not is_finished,
-        tooltip="View this run's results" if is_finished else "Available once the run finishes successfully",
+        disabled=not finished,
+        tooltip="View results" if finished else "Available once a run finishes successfully",
         layout=widgets.Layout(width=_ROW_COL_WIDTHS[7]),
     )
-    load_results_btn.on_click(lambda _b, row=r: on_load_results(row))
+    load_results_btn.on_click(lambda _b, row=group_row: on_load_results(row))
+    status_html = (
+        widgets.HTML(batch_status_html(rows), layout=widgets.Layout(width=_ROW_COL_WIDTHS[5]))
+        if batch
+        else widgets.HTML(_effective_status_html(first), layout=widgets.Layout(width=_ROW_COL_WIDTHS[5]))
+    )
     cells = [
+        widgets.HTML(html.escape(_fmt(job_id)), layout=widgets.Layout(width=_ROW_COL_WIDTHS[0])),
+        widgets.HTML(html.escape(_fmt(run_id_text)), layout=widgets.Layout(width=_ROW_COL_WIDTHS[1])),
         cif_html,
-        widgets.HTML(_fmt(r.get("run_id")), layout=widgets.Layout(width=_ROW_COL_WIDTHS[1])),
-        widgets.HTML(_fmt(r.get("job_id")), layout=widgets.Layout(width=_ROW_COL_WIDTHS[2])),
-        widgets.HTML(_fmt_calc_type(r.get("calc_type")), layout=widgets.Layout(width=_ROW_COL_WIDTHS[3])),
-        widgets.HTML(_fmt_energy(r.get("energy_ry")), layout=widgets.Layout(width=_ROW_COL_WIDTHS[4])),
-        widgets.HTML(_effective_status_html(r), layout=widgets.Layout(width=_ROW_COL_WIDTHS[5])),
+        widgets.HTML(
+            f'<span title="{html.escape(cif_dir or "")}">{html.escape(cif_dir or "")}</span>',
+            layout=widgets.Layout(width=_ROW_COL_WIDTHS[3]),
+        ),
+        widgets.HTML(_fmt_calc_type(first.get("calc_type")), layout=widgets.Layout(width=_ROW_COL_WIDTHS[4])),
+        status_html,
         open_btn,
         load_results_btn,
     ]
@@ -94,11 +121,6 @@ def _build_runs_page(nav: _Nav):
 
     # ── Filter by user / jump straight to a run's results ───────────────────
     user_filter_w = widgets.Dropdown(layout=widgets.Layout(width="calc(40% - 8px)"))
-    job_w = widgets.Dropdown(layout=widgets.Layout(width="calc(40% - 8px)"))
-    load_selected_btn = widgets.Button(
-        description="Load Results", button_style="primary", icon="line-chart",
-        layout=widgets.Layout(width="calc(20% - 8px)"),
-    )
 
     col_head = widgets.HTML(
         '<div class="advqm-rowlist-head">'
@@ -118,7 +140,7 @@ def _build_runs_page(nav: _Nav):
     # ── Monitor / Resume — the run in focus is picked by clicking a row's
     # wrench icon (see on_open below), not a separate dropdown; this label
     # just reflects whatever's currently selected. ──────────────────────────
-    selected_run = {"path": None, "label": None}
+    selected_run = {"path": None, "paths": [], "label": None}
     selected_label_w = widgets.HTML('<span class="advqm-muted">No run selected — click the ⚙ icon on a run above.</span>')
     job_status = widgets.Label(value="—")
     query_btn = widgets.Button(description="Query SLURM", icon="search")
@@ -143,18 +165,22 @@ def _build_runs_page(nav: _Nav):
     )
     state_out = widgets.Output()
 
-    def _select_run(rp: Path, label: str) -> None:
+    def _select_run(rp: Path, label: str, paths: list | None = None) -> None:
         selected_run["path"] = rp
+        selected_run["paths"] = list(paths) if paths else [rp]
         selected_run["label"] = label
         selected_label_w.value = f'<b>Selected run:</b> {label}'
         show_state()
 
     def show_state(_=None):
         state_out.clear_output()
-        rp = selected_run["path"]
+        paths = selected_run["paths"] or ([selected_run["path"]] if selected_run["path"] else [])
         with state_out:
-            if not rp:
-                return
+            for rp in paths:
+                _show_one_state(rp, header=len(paths) > 1)
+
+    def _show_one_state(rp, header=False):
+        if True:
             st = load_run_state(rp)
             if st is None:
                 print(f"No state.json found for {rp}")
@@ -174,7 +200,7 @@ def _build_runs_page(nav: _Nav):
                 ("Job ID", _fmt(crystal.get("job_id"))),
                 ("SLURM State", _fmt(crystal.get("slurm_state"))),
                 ("Setup Error", setup_error or "None"),
-                ("K-Points", _fmt(crystal.get("kpoints"))),
+                ("k-points", _fmt(crystal.get("kpoints"))),
                 ("Pseudopotential Dir", _fmt(crystal.get("pseudo_dir"))),
                 ("DFT Functional", _fmt((crystal.get("system_params") or {}).get("input_dft"))),
                 ("vdW Correction", _fmt((crystal.get("system_params") or {}).get("vdw_corr"))),
@@ -183,7 +209,7 @@ def _build_runs_page(nav: _Nav):
                     if crystal.get("gpu") else "No"
                 )),
                 ("Submitted At", _fmt(crystal.get("submitted_at"))),
-                ("Submitted By", _fmt(st.get("submitted_by"))),
+                ("User Name", _fmt(st.get("submitted_by"))),
                 ("Energy (kJ/mol)", _fmt_energy(qe_results.get("energy_ry"))),
                 ("JOB DONE seen", _fmt(qe_output.get("qe_job_done"))),
                 ("Error markers found", _fmt(", ".join(error_markers)) if error_markers else "None"),
@@ -194,37 +220,36 @@ def _build_runs_page(nav: _Nav):
                 f'<span style="color:#1f2937;">{value}</span></div>'
                 for label, value in rows
             )
-            display(HTML(f'<div style="font-size:0.85rem;">{lines}</div>'))
+            title = (
+                f'<div style="font-weight:700; margin:10px 0 4px;">{html.escape(_fmt(Path((load_run_state(rp) or {}).get("cif") or "?").name))}'
+                f' · {html.escape(rp.name)}</div>'
+                if header else ""
+            )
+            display(HTML(f'<div style="font-size:0.85rem;">{title}{lines}</div>'))
+
 
     def on_query(_=None):
-        rp = selected_run["path"]
-        if not rp:
+        paths = selected_run["paths"] or ([selected_run["path"]] if selected_run["path"] else [])
+        if not paths:
             job_status.value = "No run selected — click the ⚙ icon on a run above."
             return
-        st = load_run_state(rp) or {}
-        jid = st.get("tasks", {}).get("crystal", {}).get("job_id")
-        if not jid:
-            job_status.value = "No SLURM job_id recorded for this run"
-            return
-        try:
-            s = _query_slurm_job(str(jid))
-            job_status.value = f"Job {jid}: {s}"
-        except Exception as e:
-            job_status.value = f"Query failed: {e}"
+        msgs = []
+        for rp in paths:
+            st = load_run_state(rp) or {}
+            jid = st.get("tasks", {}).get("crystal", {}).get("job_id")
+            if not jid:
+                msgs.append(f"{rp.name}: no SLURM job_id recorded")
+                continue
+            try:
+                msgs.append(f"Job {jid}: {_query_slurm_job(str(jid))}")
+            except Exception as e:
+                msgs.append(f"Job {jid}: query failed ({e})")
+        job_status.value = " | ".join(msgs)
 
-    def on_resume(_=None):
-        rp = selected_run["path"]
-        if not rp:
-            job_status.value = "No run selected — click the ⚙ icon on a run above."
-            return
+    def _resume_one(rp: Path, mode: str, force_pp: bool) -> None:
         label = rp.parent.name
         base = Path(runs_dir_w.v_model)
-        try:
-            sel_runs_dir, sel_run_id = resume_target(base, label, rp)
-        except Exception as e:
-            job_status.value = f"Resume setup failed: {e}"
-            return
-        mode = resume_target_w.value
+        sel_runs_dir, sel_run_id = resume_target(base, label, rp)
         if mode == "latest":
             runs_dir, run_id, run_path = sel_runs_dir, None, None
         elif mode == "run_path":
@@ -240,32 +265,35 @@ def _build_runs_page(nav: _Nav):
             calc_type=st.get("calc_type") or "scf", kpoints=kpoints,
             pseudo_dir=crystal.get("pseudo_dir"),
             pp_map=None,
-            force_pp_cleanup=bool(force_pp_resume_w.value),
+            force_pp_cleanup=force_pp,
             **{key: system_params.get(key) for key in _SYSTEM_PARAM_KEYS},
         )
+        _process_single_cif(rp, runs_dir, ns)
+
+    def on_resume(_=None):
+        paths = selected_run["paths"] or ([selected_run["path"]] if selected_run["path"] else [])
+        if not paths:
+            job_status.value = "No run selected — click the ⚙ icon on a run above."
+            return
+        mode = resume_target_w.value
+        force_pp = bool(force_pp_resume_w.value)
         job_status.value = (
-            f"Resuming {mode} "
-            f"({'force PP cleanup' if force_pp_resume_w.value else 'keeping saved PP files'})..."
+            f"Resuming {len(paths)} run(s) ({mode}, "
+            f"{'force PP cleanup' if force_pp else 'keeping saved PP files'})..."
         )
         resume_btn.disabled = True
 
         def work():
             try:
-                _process_single_cif(rp, runs_dir, ns)
-            except Exception as e:
-                _run_log(f"Resume failed: {e}")
+                for rp in paths:
+                    try:
+                        _resume_one(rp, mode, force_pp)
+                    except Exception as e:
+                        _run_log(f"Resume failed for {rp.name}: {e}")
             finally:
                 resume_btn.disabled = False
 
-        t = threading.Thread(target=work, daemon=True)
-        t.start()
-
-        def _check():
-            while t.is_alive():
-                pass
-            resume_btn.disabled = False
-
-        threading.Thread(target=_check, daemon=True).start()
+        threading.Thread(target=work, daemon=True).start()
 
     query_btn.on_click(on_query)
     resume_btn.on_click(on_resume)
@@ -281,11 +309,15 @@ def _build_runs_page(nav: _Nav):
     selected_run_path_str = {"value": None}
 
     def on_open(row: dict) -> None:
-        rp = Path(row["run_path"]) if row.get("run_path") else None
-        if rp is None:
+        batch = row.get("batch_rows") or [row]
+        paths = [Path(r["run_path"]) for r in batch if r.get("run_path")]
+        if not paths:
             return
-        label = f"{_fmt(row.get('cif'))} @ {_fmt(row.get('run_id'))}"
-        _select_run(rp, label)
+        if len(paths) > 1:
+            label = f"batch of {len(paths)} runs (job {_fmt(row.get('array_job_id'))})"
+        else:
+            label = f"{_fmt(row.get('cif'))} @ {_fmt(row.get('run_id'))}"
+        _select_run(paths[0], label, paths)
         monitor_acc.selected_index = 0
         selected_run_path_str["value"] = row.get("run_path")
         render_rows()
@@ -308,21 +340,6 @@ def _build_runs_page(nav: _Nav):
             return [r for r in rows if not r.get("submitted_by")]
         return [r for r in rows if r.get("submitted_by") == selected]
 
-    def _refresh_job_dropdown(*_):
-        rows = _filtered_by_user(current_rows)
-        options = [
-            (f"{Path(r.get('cif') or '?').name} · {r.get('run_id')} · {r.get('crystal_status') or 'pending'}", r)
-            for r in sorted(rows, key=lambda r: r.get("run_id") or "", reverse=True)
-        ]
-        job_w.options = options
-        job_w.value = options[0][1] if options else None
-
-    def on_load_selected(_=None):
-        row = job_w.value
-        if not row:
-            return
-        on_load_results(row)
-
     def render_rows(*_):
         filt = (search_w.v_model or "").strip().lower()
         rows = _filtered_by_user(current_rows)
@@ -333,15 +350,22 @@ def _build_runs_page(nav: _Nav):
             or filt in str(r.get("cif", "")).lower()
             or filt in str(r.get("job_id", "")).lower()
             or filt in str(r.get("run_id", "")).lower()
+            or filt in str(r.get("run_label") or "").lower()
+            or filt in str(r.get("array_job_id") or "").lower()
         ]
         if not rows:
             empty = widgets.HTML('<div class="advqm-muted" style="padding:16px;">No runs found.</div>')
             rows_box.children = [empty]
             return
+        # One table row per multi-CIF batch (shared array job id); every other
+        # run (single CIF, or runs from before arrays) stays one row each.
+        groups = group_rows(rows)
         children = []
-        for r in rows:
-            children.append(_run_row_widget(r, on_open, on_load_results))
-            if selected_run_path_str["value"] and r.get("run_path") == selected_run_path_str["value"]:
+        for grp in groups:
+            children.append(_run_row_widget(grp, on_open, on_load_results))
+            if selected_run_path_str["value"] and any(
+                r.get("run_path") == selected_run_path_str["value"] for r in grp
+            ):
                 children.append(monitor_acc)
         rows_box.children = children
 
@@ -368,7 +392,6 @@ def _build_runs_page(nav: _Nav):
             r["submitted_by"] = (st or {}).get("submitted_by") or None
         current_rows = rows
         _refresh_user_filter()
-        _refresh_job_dropdown()
         render_rows()
 
     def _resolve_one_stale(r: dict, base: Path) -> None:
@@ -427,9 +450,7 @@ def _build_runs_page(nav: _Nav):
 
     refresh_btn.on_click(refresh_and_resolve_stale)
     search_w.observe(render_rows, names="v_model")
-    user_filter_w.observe(_refresh_job_dropdown, names="value")
     user_filter_w.observe(render_rows, names="value")
-    load_selected_btn.on_click(on_load_selected)
 
     refresh()
 
@@ -437,7 +458,7 @@ def _build_runs_page(nav: _Nav):
         [
             widgets.HTML('<div class="advqm-card-title">Filter by user / jump to results</div>'),
             widgets.HBox(
-                [user_filter_w, job_w, load_selected_btn],
+                [user_filter_w],
                 layout=widgets.Layout(width="100%", justify_content="space-between"),
             ),
         ]
@@ -450,8 +471,8 @@ def _build_runs_page(nav: _Nav):
             widgets.HBox(
                 [new_run_btn], layout=widgets.Layout(padding="0 0 12px 0")
             ),
-            widgets.HBox([runs_dir_w, refresh_btn]),
-            search_w,
+            widgets.HBox([labeled_field(runs_dir_w, "flex:1; min-width:0;"), refresh_btn]),
+            labeled_field(search_w),
             filter_card,
             rows_wrap,
         ]

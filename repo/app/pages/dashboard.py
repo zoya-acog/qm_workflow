@@ -1,5 +1,6 @@
 """Dashboard overview page."""
 
+import html
 from pathlib import Path
 
 import ipywidgets as widgets
@@ -9,6 +10,10 @@ from helpers import status_category
 from shared import (
     DEFAULT_RUNS_DIR,
     _Nav,
+    batch_status_html,
+    cif_list_text,
+    group_cif_names,
+    group_rows,
     _effective_status_html,
     _fmt,
     _list_all_run_rows,
@@ -55,13 +60,27 @@ def _build_dashboard_page(nav: _Nav):
                     f'<div class="advqm-muted">No runs found yet in {base}.</div></div>'
                 ))
                 return
-            recent = sorted(rows, key=lambda r: r.get("run_id") or "", reverse=True)[:5]
-            items = "".join(
-                f'<div class="advqm-list-row"><div><b>{_fmt(r.get("cif"))}</b>'
-                f'<div class="advqm-muted">{_fmt(r.get("run_id"))} &middot; '
-                f'job {_fmt(r.get("job_id"))}</div></div>{_effective_status_html(r)}</div>'
-                for r in recent
-            )
+            # One entry per multi-CIF batch (shared array job id), newest first.
+            groups = group_rows(sorted(rows, key=lambda r: r.get("run_id") or "", reverse=True))[:5]
+            entries = []
+            for grp in groups:
+                first = grp[0]
+                if len(grp) > 1:
+                    title = html.escape(cif_list_text(group_cif_names(grp)))
+                    run = first.get("run_label") or f"{first.get('run_id')} (+{len(grp) - 1} more)"
+                    job = first.get("array_job_id")
+                    status = batch_status_html(grp)
+                else:
+                    title = html.escape(_fmt(first.get("cif")))
+                    run = first.get("run_label") or first.get("run_id")
+                    job = first.get("job_id")
+                    status = _effective_status_html(first)
+                entries.append(
+                    f'<div class="advqm-list-row"><div><b>{title}</b>'
+                    f'<div class="advqm-muted">{html.escape(_fmt(run))} &middot; '
+                    f'job {html.escape(_fmt(job))}</div></div>{status}</div>'
+                )
+            items = "".join(entries)
             display(HTML(
                 f'<div class="advqm-card"><div class="advqm-card-title">Recent Runs</div>{items}</div>'
             ))

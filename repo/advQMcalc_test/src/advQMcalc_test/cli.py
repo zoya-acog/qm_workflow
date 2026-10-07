@@ -696,6 +696,91 @@ def _submit_slurm_script(script_path):
     return match.group(1), stdout
 
 
+def _submit_array_batch(run_dirs, base_runs_dir, max_concurrent=0):
+    """
+    Submit already-prepared runs as ONE SLURM array job.
+
+    Each run keeps its own folder, per-CIF SLURM script and state.json; the
+    array task k just executes run k's script (output redirected to that
+    script's .slurm.out so existing output validation keeps working).
+    Each run's job_id is stored as "<array_job_id>_<task_id>".
+    Returns the array job id string.
+    """
+    logger = setup_logger()
+    entries = []
+    for run_dir in run_dirs:
+        run_ctx = RunContext(Path(run_dir).parent, run_dir=Path(run_dir))
+        state = run_ctx.load_state()
+        crystal = state.get("tasks", {}).get("crystal", {})
+        script_rel = crystal.get("job_script")
+        if script_rel is None or crystal.get("job_id") is not None:
+            continue
+        script = (Path(run_dir) / script_rel).resolve()
+        if script.exists():
+            entries.append((run_ctx, script))
+    if not entries:
+        raise RuntimeError("No prepared runs to submit as an array")
+    if which("sbatch") is None:
+        raise RuntimeError("sbatch not found in PATH. Are you on a SLURM login node?")
+
+    batch_dir = (
+        Path(base_runs_dir) / "_batches" / datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    ).resolve()
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    manifest = batch_dir / "manifest.tsv"
+    manifest.write_text(
+        "".join(f"{script}\t{script.with_suffix('.slurm.out')}\n" for _, script in entries)
+    )
+
+    # Reuse the resource directives of the first run's script (identical
+    # settings apply to every CIF in a batch).
+    header = [
+        line
+        for line in entries[0][1].read_text().splitlines()
+        if line.startswith("#SBATCH")
+        and not line.startswith(("#SBATCH --job-name", "#SBATCH --output"))
+    ]
+    throttle = f"%{int(max_concurrent)}" if int(max_concurrent or 0) > 0 else ""
+    array_script = batch_dir / "array.slurm"
+    array_script.write_text(
+        "\n".join(
+            [
+                "#!/bin/bash",
+                "#SBATCH --job-name=advqm_batch",
+                f"#SBATCH --output={batch_dir}/%A_%a.out",
+                f"#SBATCH --array=1-{len(entries)}{throttle}",
+                *header,
+                "",
+                "set -e",
+                f'line=$(sed -n "${{SLURM_ARRAY_TASK_ID}}p" "{manifest}")',
+                'script="${line%%$\'\\t\'*}"',
+                'out="${line#*$\'\\t\'}"',
+                'exec > "$out" 2>&1',
+                'bash "$script"',
+                "",
+            ]
+        )
+    )
+
+    array_job_id, raw_stdout = _submit_slurm_script(array_script)
+    now = datetime.now().isoformat(timespec="seconds")
+    for k, (run_ctx, _) in enumerate(entries, start=1):
+        state = run_ctx.load_state()
+        crystal = state["tasks"]["crystal"]
+        crystal["job_id"] = f"{array_job_id}_{k}"
+        crystal["array_job_id"] = array_job_id
+        crystal["array_task_id"] = k
+        crystal["submitted_at"] = now
+        crystal["job_submit_stdout"] = raw_stdout
+        crystal["status"] = "submitted"
+        run_ctx.save_state(state)
+    logger.info(
+        f"Submitted {len(entries)} runs as SLURM array job {array_job_id} "
+        f"({array_script})"
+    )
+    return array_job_id
+
+
 def _query_slurm_job(job_id):
     result = subprocess.run(
         ["sacct", "-j", str(job_id), "--format=State", "--noheader"],
@@ -1095,6 +1180,10 @@ def _process_single_cif(cif_path, runs_dir, args):
     # TASK 5: SUBMIT CRYSTAL JOB
     state = run_ctx.load_state()
     crystal_task = state.get("tasks", {}).get("crystal", {})
+    if getattr(args, "defer_submit", False) and crystal_task.get("job_id") is None:
+        # Batch mode: the caller submits all prepared runs as one SLURM array.
+        logger.info("Run prepared; SLURM submission deferred to batch array")
+        return run_ctx.run_dir
     if crystal_task.get("job_id") is not None:
         logger.info(
             f"Crystal job already submitted with job_id={crystal_task['job_id']}; skipping sbatch"
@@ -1288,6 +1377,17 @@ def main():
     parser.add_argument(
         "--slurm-mem-per-cpu", default="4G", help="Memory per CPU for the SLURM script, e.g. 8G"
     )
+    parser.add_argument(
+        "--array",
+        action="store_true",
+        help="Multi-CIF: submit all runs as one SLURM array job (one job id)",
+    )
+    parser.add_argument(
+        "--array-max-concurrent",
+        type=int,
+        default=0,
+        help="Max array tasks running at once (0 = no limit)",
+    )
     parser.add_argument("--gpu", action="store_true", help="Run QE on GPU (pgpu partition)")
     parser.add_argument(
         "--gpu-type", default=None, help="GPU gres type, e.g. nvidia_geforce_rtx_4090"
@@ -1410,6 +1510,20 @@ def main():
         return
     if args.run_id is not None and multi_mode:
         setup_logger().error("--run-id is only supported in single-CIF mode")
+        return
+
+    if args.array and len(cif_paths) > 1:
+        args.defer_submit = True
+        prepared = []
+        for cif_path in cif_paths:
+            runs_dir = _runs_dir_for_cif(base_runs_dir, cif_path, multi_mode)
+            run_dir = _process_single_cif(cif_path, runs_dir, args)
+            if run_dir is not None:
+                prepared.append(run_dir)
+        try:
+            _submit_array_batch(prepared, base_runs_dir, args.array_max_concurrent)
+        except Exception as e:
+            setup_logger().error(f"Array submission failed: {e}")
         return
 
     for cif_path in cif_paths:

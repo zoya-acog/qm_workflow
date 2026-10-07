@@ -11,9 +11,9 @@ by SLURM.</p>
 <ul>
 <li><b>Automated Input Generation:</b> Leverages cif2cell to parse input CIF files and
 construct valid Quantum ESPRESSO input scripts.</li>
-<li><b>Automatic K-Point Grid Generation:</b> Calculates uniform Monkhorst-Pack k-point grids
+<li><b>Automatic k-point Grid Generation:</b> Calculates uniform Monkhorst-Pack k-point grids
 directly from crystal cell dimensions (a, b, c) and a configurable target grid separation.
-Alternatively user can provide K-Point grid manually.</li>
+Alternatively user can provide k-point grid manually.</li>
 <li><b>Pseudopotential Management:</b> Automatically inspects atomic species in the structure,
 matches them with corresponding .UPF files in a local directory.</li>
 <li><b>Custom Input Parameter Injection:</b> Allows direct configuration of DFT functionals,
@@ -42,9 +42,9 @@ Fixed Cell Optimization, or Variable Cell Optimization) from the dropdown menu.<
 <p><b>Step 2: Pseudopotentials &amp; Structure Setup</b></p>
 <ul>
 <li><b>Pseudopotential Directory:</b> Provide the path to desired pseudopotential directory</li>
-<li><b>K-Points Configuration:</b> Specify desired K-Point separation value (in Ry) to
+<li><b>k-points Configuration:</b> Specify desired k-point separation value (in Ry) to
 automatically generate grid based on the cell parameter values (prefered). Or, manually specify
-a grid in the K-Points Grid box (e.g., 3 3 2 0 0 0).</li>
+a grid in the k-points Grid box (e.g., 3 3 2 0 0 0).</li>
 </ul>
 <p><b>Step 3: Electronic &amp; Dispersion Settings</b></p>
 <ul>

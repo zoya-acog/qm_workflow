@@ -1,7 +1,9 @@
 """New Calculation submission page (single-CIF upload and multi-CIF folder modes)."""
 
 import json
+import re
 import threading
+from datetime import datetime
 from pathlib import Path
 
 import ipywidgets as widgets
@@ -11,6 +13,7 @@ from helpers import (
     UPLOAD_DIR,
     _process_single_cif,
     _runs_dir_for_cif,
+    _submit_array_batch,
     _validate_gpu_options,
     _validate_vdw_options,
     build_namespace,
@@ -18,7 +21,9 @@ from helpers import (
     load_run_state,
     save_uploads,
 )
-from shared import CALC_TYPE_LABELS, DEFAULT_RUNS_DIR, _Nav, _last_run_error, _run_log
+from shared import (
+    CALC_TYPE_LABELS, DEFAULT_RUNS_DIR, _Nav, _last_run_error, _list_all_run_rows, _run_log, labeled_field,
+)
 
 
 def _build_new_run_page(nav: _Nav):
@@ -30,14 +35,14 @@ def _build_new_run_page(nav: _Nav):
     sample_selection = {"path": None}
     sample_message = widgets.HTML('<span class="advqm-muted"></span>')
     multi_cif_dir_w = ipv.TextField(
-        label="CIF folder path",
+        label="CIF Folder Path",
         v_model="",
         placeholder="Path visible to the workflow server",
         outlined=True,
         dense=True,
     )
     cif_glob_w = ipv.TextField(
-        label="CIF filename pattern", v_model="*.cif", outlined=True, dense=True
+        label="CIF Filename Pattern", v_model="*.cif", outlined=True, dense=True
     )
     input_tabs = widgets.Tab()
     # These use ipyvuetify (not plain ipywidgets) — its Material text fields
@@ -54,24 +59,26 @@ def _build_new_run_page(nav: _Nav):
     )
     force_pp_w = widgets.Checkbox(value=False, description="Force pseudopotential cleanup")
     kpoints_w = ipv.TextField(
-        label="K-Points Grid (optional)", v_model="",
+        label="k-points Grid (Optional)", v_model="",
         placeholder="e.g. 1 1 1 0 0 0 (leave blank to use separation)",
         outlined=True, dense=True,
     )
     ksep_w = ipv.TextField(
-        label="K-Point Separation (preferred)", v_model="0.03",
-        placeholder="Used when K-Points Grid is blank", outlined=True, dense=True,
+        label="k-point Separation (Preferred)", v_model="0.03",
+        placeholder="Used when k-points Grid is blank", outlined=True, dense=True,
     )
     pseudo_dir_w = ipv.TextField(label="Pseudopotential Directory",
                                   v_model="/mnt/own6d/qe_workflow/data/pseudos",
                                   placeholder="/path/to/pseudo", outlined=True, dense=True)
     pp_map_w = ipv.TextField(
-        label="PP Map (optional)", v_model="", placeholder="/path/to/pp_map.json",
+        label="PP Map (Optional)", v_model="", placeholder="/path/to/pp_map.json",
         outlined=True, dense=True,
     )
     walltime_w = ipv.TextField(label="Walltime", v_model="12:00:00", outlined=True, dense=True)
     ntasks_w = ipv.TextField(label="Tasks", v_model="8", outlined=True, dense=True)
-    mem_w = ipv.TextField(label="Memory per CPU (GB)", v_model="4", outlined=True, dense=True,
+    maxconc_w = ipv.TextField(label="Max Concurrent Jobs (Multi-CIF)", v_model="0", outlined=True,
+                              dense=True, placeholder="0 = no limit")
+    mem_w = ipv.TextField(label="Memory Per CPU (GB)", v_model="4", outlined=True, dense=True,
                           placeholder="e.g. 4 (use 8+ for >100 atoms)")
     qe_cmd_w = ipv.TextField(label="QE Command", v_model="pw.x", outlined=True, dense=True)
     use_gpu_w = ipv.Checkbox(label="Use GPU", v_model=False, dense=True)
@@ -84,7 +91,7 @@ def _build_new_run_page(nav: _Nav):
         ],
         v_model="", outlined=True, dense=True, disabled=True,
     )
-    gpus_w = ipv.TextField(label="GPUs (one MPI rank each)", v_model="1",
+    gpus_w = ipv.TextField(label="GPUs (One MPI Rank Each)", v_model="1",
                            outlined=True, dense=True, disabled=True)
 
     def on_gpu_toggle(change) -> None:
@@ -95,8 +102,10 @@ def _build_new_run_page(nav: _Nav):
         ntasks_w.disabled = on
 
     use_gpu_w.observe(on_gpu_toggle, names="v_model")
-    submitted_by_w = ipv.TextField(label="Submitted By *", v_model="",
-                                     placeholder="Your name/initials", outlined=True, dense=True)
+    submitted_by_w = ipv.TextField(label="User Name *", v_model="",
+                                     placeholder="e.g. jsmith", outlined=True, dense=True)
+    run_id_w = ipv.TextField(label="Run ID (Optional)", v_model="",
+                             placeholder="e.g. benzene-test-1", outlined=True, dense=True)
     input_dft_w = ipv.TextField(label="DFT Functional", v_model="",
                                     placeholder="e.g. PBE (leave blank to automatically read from pseudopotential file)",
                                     outlined=True, dense=True)
@@ -108,14 +117,14 @@ def _build_new_run_page(nav: _Nav):
         dense=True,
         clearable=True,
     )
-    ecutwfc_w = ipv.TextField(label="Wavefunction cutoff (Ry)", v_model="",
+    ecutwfc_w = ipv.TextField(label="Wavefunction Cutoff (Ry)", v_model="",
                                 placeholder="e.g. 50 Ry", outlined=True, dense=True)
-    ecutrho_w = ipv.TextField(label="Charge density cutoff (Ry)", v_model="",
+    ecutrho_w = ipv.TextField(label="Charge Density Cutoff (Ry)", v_model="",
                                 placeholder="e.g. 600 Ry (Must be 8 to 12 times of Wavefunction cutoff)",
                                 outlined=True, dense=True)
-    xdm_a1_w = ipv.TextField(label="XDM a1 (XDM only)", v_model="",
+    xdm_a1_w = ipv.TextField(label="XDM a1 (XDM Only)", v_model="",
                              placeholder="e.g. 0.6836", outlined=True, dense=True, disabled=True)
-    xdm_a2_w = ipv.TextField(label="XDM a2 (XDM only)", v_model="",
+    xdm_a2_w = ipv.TextField(label="XDM a2 (XDM Only)", v_model="",
                              placeholder="e.g. 1.5045", outlined=True, dense=True, disabled=True)
     def on_vdw_change(change) -> None:
         # XDM a1/a2 only apply to the XDM correction; grey them out (and drop
@@ -176,12 +185,14 @@ def _build_new_run_page(nav: _Nav):
         walltime_w.v_model = "12:00:00"
         ntasks_w.v_model = "8"
         mem_w.v_model = "4"
+        maxconc_w.v_model = "0"
         qe_cmd_w.v_model = "pw.x"
         use_gpu_w.v_model = False
         gpu_type_w.v_model = ""
         gpus_w.v_model = "1"
         force_pp_w.value = False
         submitted_by_w.v_model = ""
+        run_id_w.v_model = ""
         vdw_corr_w.v_model = None
         for field in (input_dft_w, ecutwfc_w, ecutrho_w, xdm_a1_w, xdm_a2_w,
                       occupations_w, smearing_w, degauss_w):
@@ -193,8 +204,23 @@ def _build_new_run_page(nav: _Nav):
 
     def on_run_clicked(b: widgets.Button) -> None:
         if not (submitted_by_w.v_model or "").strip():
-            _run_log("Submitted By is required — enter your name/initials before submitting.")
+            _run_log("User Name is required — enter your user name (e.g. jsmith) before submitting.")
             return
+        run_label_val = (run_id_w.v_model or "").strip()
+        if run_label_val:
+            if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", run_label_val):
+                _run_log("Run ID may only contain letters, digits, '.', '_' and '-' (max 64 characters).")
+                return
+            try:
+                taken = any(
+                    r.get("run_label") == run_label_val
+                    for r in _list_all_run_rows(Path(runs_dir_w.v_model))
+                )
+            except Exception:
+                taken = False
+            if taken:
+                _run_log(f"Run ID '{run_label_val}' is already used by another submission; choose a different one.")
+                return
         run_btn.disabled = True
         base_runs = Path(runs_dir_w.v_model)
         if input_tabs.selected_index == 0:
@@ -244,6 +270,9 @@ def _build_new_run_page(nav: _Nav):
         try:
             ntasks_val = int(ntasks_w.v_model)
             mem_gb = float(mem_w.v_model)
+            maxconc_val = int(maxconc_w.v_model or 0)
+            if maxconc_val < 0:
+                raise ValueError("Max concurrent jobs cannot be negative")
             if mem_gb <= 0:
                 raise ValueError("Memory per CPU must be positive")
             gpus_val = int(gpus_w.v_model or 1)
@@ -253,7 +282,7 @@ def _build_new_run_page(nav: _Nav):
                 # Explicit grid takes precedence; separation is not used.
                 ksep_val = 0.03
             elif not ksep_text:
-                raise ValueError("Enter a K-Points Grid or K-Point Separation")
+                raise ValueError("Enter a k-points Grid or k-point Separation")
             else:
                 ksep_val = float(ksep_text)
             numeric_params = {
@@ -322,14 +351,17 @@ def _build_new_run_page(nav: _Nav):
             return
 
         submitted_by = submitted_by_w.v_model.strip()
+        cif_dir_val = (multi_cif_dir_w.v_model or "").strip() if multi else ""
         log_name = common.get("log_name") or "advQMcalc.log"
 
         def work() -> None:
             _run_log(f"Starting run for {len(staged)} CIF file(s)")
             submitted = 0
             failed = 0
+            use_array = len(staged) > 1
+            prepared: list[tuple] = []
             for cif in staged:
-                ns = build_namespace(cif=[str(cif)], **common)
+                ns = build_namespace(cif=[str(cif)], defer_submit=use_array, **common)
                 runs_dir = _runs_dir_for_cif(base_runs, cif, multi)
                 try:
                     run_dir = _process_single_cif(cif, runs_dir, ns)
@@ -344,7 +376,31 @@ def _build_new_run_page(nav: _Nav):
                         f"see {log_name} in its run folder for details."
                     )
                     continue
-                run_dir = Path(run_dir)
+                prepared.append((cif, Path(run_dir)))
+
+            if use_array and prepared:
+                # Link the runs of this submission up front, so they stay grouped
+                # in the tables even if the array submission below fails.
+                batch_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+                for _cif, rd in prepared:
+                    try:
+                        sf = rd / "state.json"
+                        st_ = json.loads(sf.read_text())
+                        st_["batch_id"] = batch_id
+                        sf.write_text(json.dumps(st_, indent=2))
+                    except Exception:
+                        pass
+                try:
+                    array_id = _submit_array_batch(
+                        [rd for _, rd in prepared], base_runs, maxconc_val
+                    )
+                    _run_log(
+                        f"Submitted {len(prepared)} runs as one SLURM array job {array_id}"
+                    )
+                except Exception as e:
+                    _run_log(f"Array submission failed: {e}")
+
+            for cif, run_dir in prepared:
                 st = load_run_state(run_dir)
                 crystal = (st or {}).get("tasks", {}).get("crystal", {})
                 if crystal.get("job_id"):
@@ -353,6 +409,8 @@ def _build_new_run_page(nav: _Nav):
                         state_file = run_dir / "state.json"
                         state = json.loads(state_file.read_text())
                         state["submitted_by"] = submitted_by or None
+                        state["run_label"] = run_label_val or None
+                        state["cif_dir"] = cif_dir_val or None
                         state_file.write_text(json.dumps(state, indent=2))
                     except Exception:
                         pass
@@ -406,13 +464,13 @@ def _build_new_run_page(nav: _Nav):
     )
 
     def _ipv_row(*widgets_):
-        # Vuetify's outlined text field floats its label up into the top
-        # border on focus/when filled — with zero top padding on the column,
-        # that label had nowhere to go and was getting clipped by whatever
-        # sits directly above it. padding-top gives it room without touching
-        # the horizontal spacing/design.
+        # Field names sit in a plain label above each input (no floating labels
+        # on the border), so the column needs no extra top padding for them.
+        def _prep(w):
+            return labeled_field(w) if isinstance(w, (ipv.TextField, ipv.Select)) else w
+
         return ipv.Row(children=[
-            ipv.Col(children=[w], style_="flex:1; min-width:0; padding:10px 8px 0 8px;") for w in widgets_
+            ipv.Col(children=[_prep(w)], style_="flex:1; min-width:0; padding:0 8px;") for w in widgets_
         ], style_="margin:0 -8px;")
 
     def _collapsible_section(title: str, content, expanded: bool = False):
@@ -439,6 +497,7 @@ def _build_new_run_page(nav: _Nav):
     input_tabs.set_title(1, "Multiple CIF Files")
     upload_card = widgets.VBox([input_tabs])
     upload_card.add_class("advqm-card")
+    upload_card.add_class("advqm-card-flat")
     upload_section = _collapsible_section("📄 Crystal Structure Files", upload_card, expanded=True)
 
     params_card = widgets.VBox(
@@ -449,20 +508,22 @@ def _build_new_run_page(nav: _Nav):
             _ipv_row(xdm_a1_w, xdm_a2_w, ecutwfc_w),
             _ipv_row(ecutrho_w, occupations_w, smearing_w),
             _ipv_row(degauss_w),
-            _ipv_row(submitted_by_w),
+            _ipv_row(submitted_by_w, run_id_w),
         ]
     )
     params_card.add_class("advqm-card")
+    params_card.add_class("advqm-card-flat")
     params_section = _collapsible_section("⚙️ Input Settings", params_card, expanded=True)
 
     slurm_card = widgets.VBox(
         [
             _ipv_row(walltime_w, ntasks_w, qe_cmd_w),
-            _ipv_row(mem_w),
+            _ipv_row(mem_w, maxconc_w),
             _ipv_row(use_gpu_w, gpu_type_w, gpus_w),
         ]
     )
     slurm_card.add_class("advqm-card")
+    slurm_card.add_class("advqm-card-flat")
     slurm_section = _collapsible_section("🖥️ SLURM Configuration", slurm_card)
 
     additional_content = widgets.VBox(
@@ -474,6 +535,7 @@ def _build_new_run_page(nav: _Nav):
         ]
     )
     additional_content.add_class("advqm-card")
+    additional_content.add_class("advqm-card-flat")
     additional = _collapsible_section("Additional Settings", additional_content)
 
     actions = widgets.HBox([sample_btn, run_btn, reset_btn])

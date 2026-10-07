@@ -42,7 +42,7 @@ docker run -d --name "$CONTAINER" \
   -v "/mnt/own6d/qe_workflow/data:/mnt/own6d/qe_workflow/data" \
   -v /run/munge:/run/munge \
   --user "7158:6006" -e HOME=/tmp \
-  --label port="8866" --label user="zoya" \
+  --label hostname="advqm-voila" --label port="8866" --label user="zoya@aganitha.ai" --label security=none \
   --label description="advQMcalc_test QM Crystal Workflow Voila" \
   "$IMAGE"
 

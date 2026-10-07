@@ -23,6 +23,7 @@ try:
         _write_summary_json,
         _validate_vdw_options,
         _validate_gpu_options,
+        _submit_array_batch,
     )
 except ModuleNotFoundError as exc:
     raise ModuleNotFoundError(
@@ -47,6 +48,9 @@ DEFAULTS = dict(
     slurm_walltime="12:00:00",
     slurm_ntasks=8,
     slurm_mem_per_cpu="4G",
+    defer_submit=False,
+    array=False,
+    array_max_concurrent=0,
     qe_command="pw.x",
     gpu=False,
     gpu_type=None,
@@ -262,6 +266,9 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 
 .advqm-card { background:#fff; border:1px solid #e5e9f0; border-radius:12px;
     padding:18px 20px; margin-bottom:16px; box-shadow:0 1px 3px rgba(15,23,42,0.05); }
+/* Flat variant: drop the inner box visuals (background/border/radius/shadow) but
+   keep the card's padding and margin, so layout and spacing are unchanged. */
+.advqm-card.advqm-card-flat { background:transparent; border:none; border-radius:0; box-shadow:none; }
 .advqm-card-title { font-weight:700; font-size:0.95rem; color:#101828;
     display:flex; align-items:center; gap:8px; margin-bottom:14px; }
 
@@ -428,6 +435,7 @@ __all__ = [
     "_aggregate_crystal_results",
     "_query_slurm_job",
     "_validate_gpu_options",
+    "_submit_array_batch",
     "_runs_dir_for_cif",
     "_write_summary_csv",
     "_write_summary_json",

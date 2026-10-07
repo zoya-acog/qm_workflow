@@ -1,13 +1,19 @@
 """Shared UI state, formatting, and run-row helpers (imported by every page)."""
 
+import base64
 import html
+import io
 import json
 import logging
+import re
+import subprocess
+import tempfile
 from pathlib import Path
 
 import ipywidgets as widgets
+import ipyvuetify as ipv
 
-from helpers import status_badge_html, status_category
+from helpers import _STATUS_MAP, status_badge_html, status_category
 
 DEFAULT_RUNS_DIR = "/mnt/own6d/qe_workflow/data/runs"
 _SYSTEM_PARAM_KEYS = (
@@ -41,6 +47,195 @@ RY_TO_KJ_MOL = 13.605693122994 * 96.48533212331002
 def ry_to_kj_mol(v):
     """Convert an energy in Ry to kJ/mol (None if not numeric)."""
     return v * RY_TO_KJ_MOL if isinstance(v, (int, float)) else None
+
+
+_QE_TOTAL_ENERGY = re.compile(r"^!\s+total energy\s+=\s+(-?\d+\.\d+)\s+Ry", re.M)
+
+
+def energy_vs_step(out_path) -> list[float]:
+    """Total energy (kJ/mol) after each optimisation step of a QE output.
+
+    QE prints one "!    total energy" line per ionic step of a relax or
+    vc-relax run. Returns [] when the file is missing or has fewer than two
+    steps (a single-point run has nothing to plot).
+    """
+    try:
+        text = Path(out_path).read_text(errors="ignore")
+    except (OSError, TypeError):
+        return []
+    energies = [float(m) * RY_TO_KJ_MOL for m in _QE_TOTAL_ENERGY.findall(text)]
+    return energies if len(energies) >= 2 else []
+
+
+_PWO2XSF = Path(__file__).resolve().parent / "tools" / "pwo2xsf.sh"
+_TRAJ_CACHE: dict[tuple[str, float], bytes | None] = {}
+
+
+def _run_pwo2xsf(option: str, out_path: str) -> str:
+    """Run QE's pwo2xsf.sh (writes XSF to stdout) in a scratch dir; "" on failure."""
+    with tempfile.TemporaryDirectory(prefix="pwo2xsf_") as tmp:
+        try:
+            res = subprocess.run(
+                ["sh", str(_PWO2XSF), option, str(out_path)],
+                cwd=tmp, capture_output=True, text=True, timeout=60,
+                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+            )
+        except (OSError, subprocess.SubprocessError):
+            return ""
+    return res.stdout if res.returncode == 0 else ""
+
+
+def trajectory_xsf(out_path) -> bytes | None:
+    """Structure file extracted from a QE output with pwo2xsf.
+
+    Relax / vc-relax runs give an animated XSF (AXSF) with every ionic step;
+    a single-point run has only one structure, so it gets the input structure.
+    Returns None when nothing could be extracted. Cached per file and mtime.
+    """
+    try:
+        key = (str(out_path), Path(out_path).stat().st_mtime)
+    except (OSError, TypeError):
+        return None
+    if key in _TRAJ_CACHE:
+        return _TRAJ_CACHE[key]
+    text = _run_pwo2xsf("-a", out_path)
+    if text.count("PRIMCOORD") < 2:
+        text = _run_pwo2xsf("-ic", out_path)
+    data = text.encode() if "PRIMCOORD" in text else None
+    _TRAJ_CACHE[key] = data
+    return data
+
+
+def energy_plot_html(energies: list[float], label: str) -> str:
+    """Card with a Total Energy vs Optimisation Step plot (PNG embedded as base64).
+
+    Style follows the plot cards in AutoMD-OXtalS: the name sits above the
+    figure and the figure itself carries no title.
+    """
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.ticker import MaxNLocator
+    except ImportError:
+        return '<div class="advqm-muted">Plotting needs matplotlib, which is not installed.</div>'
+
+    steps = list(range(len(energies)))
+    fig, ax = plt.subplots(figsize=(7.2, 3.6), dpi=130)
+    ax.plot(steps, energies, marker="o", markersize=4, linewidth=1.6, color="#1565c0")
+    ax.set_xlabel("Optimisation Step", fontsize=10, color="#374151")
+    ax.set_ylabel("Total Energy (kJ/mol)", fontsize=10, color="#374151")
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.ticklabel_format(axis="y", useOffset=False, style="plain")
+    ax.grid(True, color="#e5e7eb", linewidth=0.8)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    ax.tick_params(labelsize=9, colors="#374151")
+    fig.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", facecolor="white")
+    plt.close(fig)
+    img = base64.b64encode(buf.getvalue()).decode("ascii")
+    return (
+        '<div style="border:1px solid #e5e7eb; border-radius:10px; background:#fff; overflow:hidden;">'
+        f'<div style="padding:10px 12px 4px; font-size:0.86rem; font-weight:700; color:#12344d;">'
+        f'{html.escape(label)}</div>'
+        f'<img src="data:image/png;base64,{img}" style="width:100%; max-width:760px; display:block; background:#fff;"/>'
+        "</div>"
+    )
+
+
+def cif_list_text(names: list[str]) -> str:
+    """One name for a single CIF; "{a.cif, b.cif, ..., z.cif}" for a batch."""
+    if len(names) == 1:
+        return names[0]
+    shown = names if len(names) <= 4 else names[:2] + ["..."] + names[-1:]
+    return "{" + ", ".join(shown) + "}"
+
+
+def batch_status_text(rows: list[dict]) -> str:
+    cats = [status_category(r.get("crystal_status")) for r in rows]
+    n = len(rows)
+    done, failed = cats.count("success"), cats.count("danger")
+    running = n - done - failed
+    if done == n:
+        return f"Finished ({done}/{n})"
+    if failed == n:
+        return f"Failed ({failed}/{n})"
+    parts = []
+    if running:
+        parts.append(f"{running} In Progress")
+    if done:
+        parts.append(f"{done} Finished")
+    if failed:
+        parts.append(f"{failed} Failed")
+    return ", ".join(parts)
+
+
+def batch_status_html(rows: list[dict]) -> str:
+    """Batch status as one coloured pill per state, stacked, e.g.
+    "Finished (1/3)" with "Pending (2/3)" below it."""
+    n = len(rows)
+    counts: dict[tuple[str, str], int] = {}
+    for r in rows:
+        key = (r.get("crystal_status") or "").lower()
+        label, css = _STATUS_MAP.get(key, ((r.get("crystal_status") or "Unknown").replace("_", " ").title(), "neutral"))
+        counts[(label, css)] = counts.get((label, css), 0) + 1
+    order = {"success": 0, "info": 1, "warning": 2, "danger": 3, "neutral": 4}
+    pills = "".join(
+        f'<div style="margin-bottom:3px;"><span class="advqm-badge advqm-badge-{css}">'
+        f"{html.escape(label)} ({count}/{n})</span></div>"
+        for (label, css), count in sorted(counts.items(), key=lambda kv: (order.get(kv[0][1], 9), kv[0][0]))
+    )
+    return f"<div>{pills}</div>"
+
+
+def group_rows(rows: list[dict]) -> list[list[dict]]:
+    """Group runs submitted together (same array job id) into one list; every
+    other run stays on its own. Order follows each group's first appearance."""
+    groups: list[list[dict]] = []
+    by_array: dict[str, list[dict]] = {}
+    for r in rows:
+        aid = r.get("array_job_id") or r.get("batch_id")
+        if aid:
+            if aid not in by_array:
+                by_array[aid] = []
+                groups.append(by_array[aid])
+            by_array[aid].append(r)
+        else:
+            groups.append([r])
+    return groups
+
+
+def group_cif_names(rows: list[dict]) -> list[str]:
+    return [
+        Path(r.get("cif")).name if r.get("cif") else "?"
+        for r in sorted(rows, key=lambda r: (r.get("array_task_id") or 0, r.get("cif") or ""))
+    ]
+
+
+def labeled_field(w, style: str = ""):
+    """Show an ipyvuetify field's name as a plain label ABOVE the input box.
+
+    Moves the widget's floating label out of the input (label becomes empty) and
+    puts the same text in a small bold caption above it, matching the field
+    labels in AutoMD-OXtalS (0.86rem / 600 / #374151). Widget and logic are
+    otherwise untouched; fields without a label are returned as-is.
+    """
+    text = getattr(w, "label", "") or ""
+    if not text:
+        return w
+    w.label = ""
+    caption = ipv.Html(
+        tag="div",
+        children=[ipv.Html(
+            tag="span", children=[text],
+            style_="font-size:0.86rem; font-weight:600; color:#374151;",
+        )],
+        style_="display:flex; align-items:center; margin:8px 0 2px 0;",
+    )
+    return ipv.Html(tag="div", children=[caption, w], style_=style)
 
 
 def _fmt_energy(v) -> str:
@@ -104,6 +299,11 @@ def _list_all_run_rows(base: Path, only_successful: bool = False) -> list[dict]:
             "crystal_status": crystal_status,
             "slurm_state": crystal.get("slurm_state"),
             "job_id": crystal.get("job_id"),
+            "array_job_id": crystal.get("array_job_id"),
+            "batch_id": state.get("batch_id"),
+            "array_task_id": crystal.get("array_task_id"),
+            "run_label": state.get("run_label"),
+            "cif_dir": state.get("cif_dir"),
             "kpoints": crystal.get("kpoints"),
             "pseudo_dir": crystal.get("pseudo_dir"),
             "qe_output_file": qe_output_block.get("qe_output_file"),

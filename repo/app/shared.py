@@ -98,9 +98,9 @@ def trajectory_xsf(out_path) -> bytes | None:
         return None
     if key in _TRAJ_CACHE:
         return _TRAJ_CACHE[key]
-    text = _run_pwo2xsf("-a", out_path)
+    text = _run_pwo2xsf("--animxsf", out_path)
     if text.count("PRIMCOORD") < 2:
-        text = _run_pwo2xsf("-ic", out_path)
+        text = _run_pwo2xsf("--inicoor", out_path)
     data = text.encode() if "PRIMCOORD" in text else None
     _TRAJ_CACHE[key] = data
     return data
@@ -146,10 +146,32 @@ def energy_plot_html(energies: list[float], label: str) -> str:
     )
 
 
-def cif_list_text(names: list[str]) -> str:
-    """One name for a single CIF; "{a.cif, b.cif, ..., z.cif}" for a batch."""
+def grid_columns(widths: list[str]) -> str:
+    """CSS grid-template-columns for a table, from percentage widths. Header and
+    rows use the same string so their columns line up exactly."""
+    return " ".join(f"minmax(0,{w.rstrip('%')}fr)" for w in widths)
+
+
+def table_head_html(labels: list[str], widths: list[str], min_width: str | None = None, info: dict | None = None) -> str:
+    """Header row of a row-list table: same grid as the rows beneath it."""
+    info = info or {}
+    cells = "".join(
+        f"<span>{html.escape(label)}{info.get(label, '')}</span>" for label in labels
+    )
+    return (
+        f'<div class="advqm-rowlist-head" style="display:grid; '
+        f'grid-template-columns:{grid_columns(widths)};'
+        f'{f" min-width:{min_width};" if min_width else ""}">{cells}</div>'
+    )
+
+
+def cif_list_text(names: list[str], compact: bool = False) -> str:
+    """One name for a single CIF; "{a.cif, b.cif, ..., z.cif}" for a batch.
+    compact=True shortens a batch to "{a.cif,...}" to save space."""
     if len(names) == 1:
         return names[0]
+    if compact:
+        return "{" + names[0] + ",...}"
     shown = names if len(names) <= 4 else names[:2] + ["..."] + names[-1:]
     return "{" + ", ".join(shown) + "}"
 
@@ -246,7 +268,7 @@ def _fmt_energy(v) -> str:
 
 # Display names for calculation types; the backend keeps the original keys.
 CALC_TYPE_LABELS = {
-    "scf": "Single Point energy",
+    "scf": "Single Point Energy",
     "relax": "Fixed Cell Optimization",
     "vc-relax": "Variable Cell Optimization",
 }
@@ -386,7 +408,7 @@ def _last_run_error(run_dir: Path, log_name: str = "advQMcalc.log") -> str | Non
 
 
 CALC_TYPE_LABELS = {
-    "scf": "Single Point energy",
+    "scf": "Single Point Energy",
     "relax": "Fixed Cell Optimization",
     "vc-relax": "Variable Cell Optimization",
 }

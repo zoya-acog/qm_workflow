@@ -19,6 +19,8 @@ from helpers import (
 from shared import (
     CALC_TYPE_LABELS,
     batch_status_html,
+    grid_columns,
+    table_head_html,
     cif_list_text,
     group_cif_names,
     group_rows,
@@ -37,9 +39,19 @@ from shared import (
 
 
 _ROW_COL_WIDTHS = ["10%", "16%", "20%", "18%", "12%", "12%", "5%", "7%"]
+_TABLE_MIN_WIDTH = "1100px"  # below this the table scrolls sideways
 
 
 _ROW_COL_LABELS = ["Job ID", "Run ID", "CIF File", "Path", "Calculation Type", "Status", "", ""]
+
+
+# ⓘ next to the Calculation Type header: the table shows QE's own keywords, the
+# tooltip says what each one means.
+_CALC_TYPE_INFO = (
+    ' <span style="cursor:help; color:#1565c0; font-weight:700;" '
+    'title="scf = Single Point Energy&#10;relax = Fixed Cell Optimization'
+    '&#10;vc-relax = Variable Cell Optimization">&#9432;</span>'
+)
 
 
 def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:
@@ -49,10 +61,10 @@ def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:
     group_row = {**first, "batch_rows": rows} if batch else first
 
     names = group_cif_names(rows)
-    cif_text = cif_list_text(names)
+    cif_text = cif_list_text(names, compact=True)
     cif_html = widgets.HTML(
         f'<span title="{html.escape(", ".join(names))}">{html.escape(cif_text)}</span>',
-        layout=widgets.Layout(width=_ROW_COL_WIDTHS[2]),
+        layout=widgets.Layout(width="100%"),
     )
     cif_html.add_class("advqm-rowcell-cif")
 
@@ -65,36 +77,39 @@ def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:
 
     open_btn = widgets.Button(
         icon="wrench", tooltip="Monitor & Resume this run" if not batch else "Monitor & Resume all runs in this batch",
-        layout=widgets.Layout(width=_ROW_COL_WIDTHS[6]),
+        layout=widgets.Layout(width="100%"),
     )
     open_btn.on_click(lambda _b, row=group_row: on_open(row))
     finished = [r for r in rows if status_category(r.get("crystal_status")) == "success"]
     load_results_btn = widgets.Button(
-        description="Load Results", icon="line-chart",
+        icon="line-chart",
         disabled=not finished,
         tooltip="View results" if finished else "Available once a run finishes successfully",
-        layout=widgets.Layout(width=_ROW_COL_WIDTHS[7]),
+        layout=widgets.Layout(width="100%"),
     )
     load_results_btn.on_click(lambda _b, row=group_row: on_load_results(row))
     status_html = (
-        widgets.HTML(batch_status_html(rows), layout=widgets.Layout(width=_ROW_COL_WIDTHS[5]))
+        widgets.HTML(batch_status_html(rows), layout=widgets.Layout(width="100%"))
         if batch
-        else widgets.HTML(_effective_status_html(first), layout=widgets.Layout(width=_ROW_COL_WIDTHS[5]))
+        else widgets.HTML(_effective_status_html(first), layout=widgets.Layout(width="100%"))
     )
     cells = [
-        widgets.HTML(html.escape(_fmt(job_id)), layout=widgets.Layout(width=_ROW_COL_WIDTHS[0])),
-        widgets.HTML(html.escape(_fmt(run_id_text)), layout=widgets.Layout(width=_ROW_COL_WIDTHS[1])),
+        widgets.HTML(html.escape(_fmt(job_id)), layout=widgets.Layout(width="100%")),
+        widgets.HTML(html.escape(_fmt(run_id_text)), layout=widgets.Layout(width="100%")),
         cif_html,
         widgets.HTML(
             f'<span title="{html.escape(cif_dir or "")}">{html.escape(cif_dir or "")}</span>',
-            layout=widgets.Layout(width=_ROW_COL_WIDTHS[3]),
+            layout=widgets.Layout(width="100%"),
         ),
-        widgets.HTML(_fmt_calc_type(first.get("calc_type")), layout=widgets.Layout(width=_ROW_COL_WIDTHS[4])),
+        widgets.HTML(html.escape(_fmt(first.get("calc_type"))), layout=widgets.Layout(width="100%")),
         status_html,
         open_btn,
         load_results_btn,
     ]
-    row_box = widgets.HBox(cells, layout=widgets.Layout(width="100%"))
+    row_box = widgets.HBox(cells, layout=widgets.Layout(
+        width="100%", min_width=_TABLE_MIN_WIDTH,
+        display="grid", grid_template_columns=grid_columns(_ROW_COL_WIDTHS),
+    ))
     row_box.add_class("advqm-rowlist-row")
     return row_box
 
@@ -122,14 +137,10 @@ def _build_runs_page(nav: _Nav):
     # ── Filter by user / jump straight to a run's results ───────────────────
     user_filter_w = widgets.Dropdown(layout=widgets.Layout(width="calc(40% - 8px)"))
 
-    col_head = widgets.HTML(
-        '<div class="advqm-rowlist-head">'
-        + "".join(
-            f'<span style="width:{w};">{label}</span>'
-            for w, label in zip(_ROW_COL_WIDTHS, _ROW_COL_LABELS)
-        )
-        + "</div>"
-    )
+    col_head = widgets.HTML(table_head_html(
+        _ROW_COL_LABELS, _ROW_COL_WIDTHS, _TABLE_MIN_WIDTH,
+        info={"Calculation Type": _CALC_TYPE_INFO},
+    ))
     rows_box = widgets.VBox([])
     rows_wrap = widgets.VBox([col_head, rows_box])
     rows_wrap.add_class("advqm-card")

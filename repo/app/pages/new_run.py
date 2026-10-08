@@ -26,6 +26,11 @@ from shared import (
 )
 
 
+# QE default XDM damping parameters (xdm_a1, xdm_a2).
+XDM_DEFAULT_A1 = "0.6836"
+XDM_DEFAULT_A2 = "1.5045"
+
+
 def _build_new_run_page(nav: _Nav):
     upload = widgets.FileUpload(
         accept=".cif", multiple=False, description="Upload", icon="upload",
@@ -49,7 +54,7 @@ def _build_new_run_page(nav: _Nav):
     # handle box-sizing/width correctly inside percentage-width flex columns,
     # which plain ipywidgets <input> elements were not doing reliably (fields
     # were getting cut off on the right / causing horizontal scroll).
-    calc_type_w = ipv.Select(label="Calculation Type", items=[{"text": t, "value": k} for k, t in CALC_TYPE_LABELS.items()],
+    calc_type_w = ipv.Select(label="Calculation Type", items=[{"text": f"{t} ({k})", "value": k} for k, t in CALC_TYPE_LABELS.items()],
                               v_model="scf", outlined=True, dense=True)
     runs_dir_w = ipv.TextField(
         label="Runs Directory", v_model=DEFAULT_RUNS_DIR, outlined=True, dense=True
@@ -120,7 +125,7 @@ def _build_new_run_page(nav: _Nav):
     ecutwfc_w = ipv.TextField(label="Wavefunction Cutoff (Ry)", v_model="",
                                 placeholder="e.g. 50 Ry", outlined=True, dense=True)
     ecutrho_w = ipv.TextField(label="Charge Density Cutoff (Ry)", v_model="",
-                                placeholder="e.g. 600 Ry (Must be 8 to 12 times of Wavefunction cutoff)",
+                                placeholder="e.g. 600 Ry (8 to 12 times of Wavefunction cutoff)",
                                 outlined=True, dense=True)
     xdm_a1_w = ipv.TextField(label="XDM a1 (XDM Only)", v_model="",
                              placeholder="e.g. 0.6836", outlined=True, dense=True, disabled=True)
@@ -130,10 +135,14 @@ def _build_new_run_page(nav: _Nav):
         # XDM a1/a2 only apply to the XDM correction; grey them out (and drop
         # any typed value) otherwise.
         is_xdm = (change["new"] or "").strip().lower() == "xdm"
-        for w in (xdm_a1_w, xdm_a2_w):
+        for w, default in ((xdm_a1_w, XDM_DEFAULT_A1), (xdm_a2_w, XDM_DEFAULT_A2)):
             w.disabled = not is_xdm
             if not is_xdm:
                 w.v_model = ""
+            elif not (w.v_model or "").strip():
+                # Autofill with QE's default XDM parameters (the backend leaves
+                # them unset, so QE applies these same values); still editable.
+                w.v_model = default
 
     vdw_corr_w.observe(on_vdw_change, names="v_model")
     occupations_w = ipv.TextField(label="Occupations", v_model="", placeholder="e.g. smearing", outlined=True, dense=True)

@@ -322,9 +322,10 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 .advqm-muted { color:#98a2b3; font-size:0.78rem; }
 
 /* ── clickable runs row-list (Runs page) ───────────────────────────────── */
-.advqm-rowlist { padding:0 !important; overflow:hidden; }
+.advqm-rowlist { padding:0 !important; overflow-x:auto !important; overflow-y:hidden; }
+.advqm-rowlist.advqm-rowlist-noscroll { overflow:hidden !important; }
 .advqm-rowlist-head { display:flex; align-items:center; box-sizing:border-box;
-    padding:12px 16px; font-size:0.72rem; font-weight:700; color:#667085;
+    padding:12px 16px; font-size:0.9rem; font-weight:700; color:#667085;
     letter-spacing:0.02em; border-bottom:1px solid #e5e9f0;
     background:#fafbfc; }
 .advqm-rowlist-head span { box-sizing:border-box; flex:0 1 auto; min-width:0;
@@ -332,7 +333,7 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 .advqm-rowlist-row.widget-hbox { padding:10px 16px !important; border-bottom:1px solid #f1f3f7 !important;
     align-items:center !important; font-size:0.95rem !important; }
 .advqm-rowlist-row.widget-hbox:hover { background:#fafbfc !important; }
-.advqm-rowlist-row.widget-hbox > * { box-sizing:border-box !important; min-width:0 !important; }
+.advqm-rowlist-row.widget-hbox > * { box-sizing:border-box !important; min-width:0 !important; margin:0 !important; }
 .advqm-rowcell-cif span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .advqm-rowlist-row .widget-button { min-width:0 !important; min-height:28px !important;
     padding:2px 6px !important; }

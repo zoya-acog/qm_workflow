@@ -36,7 +36,7 @@ _DOC_HOWTO_HTML = """
 <ul>
 <li><b>Single/Multiple CIFs:</b> Upload a single CIF file, or provide path to directory storing
 multiple CIFs.</li>
-<li><b>Choose Calculation Type:</b> Select the desired Quantum ESPRESSO calculation mode (Single Point energy,
+<li><b>Choose Calculation Type:</b> Select the desired Quantum ESPRESSO calculation mode (Single Point Energy,
 Fixed Cell Optimization, or Variable Cell Optimization) from the dropdown menu.</li>
 </ul>
 <p><b>Step 2: Pseudopotentials &amp; Structure Setup</b></p>

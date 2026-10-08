@@ -5,6 +5,7 @@ import csv
 import html
 import io
 import re
+import types
 import zipfile
 import shlex
 from pathlib import Path
@@ -16,7 +17,7 @@ from IPython.display import HTML, display
 from helpers import load_run_state
 from shared import (
     DEFAULT_RUNS_DIR, cif_list_text, energy_plot_html, energy_vs_step, group_cif_names, group_rows,
-    trajectory_xsf, RY_TO_KJ_MOL, _Nav, _fmt, _list_all_run_rows, labeled_field, ry_to_kj_mol,
+    grid_columns, table_head_html, trajectory_xsf, RY_TO_KJ_MOL, _Nav, _fmt, _list_all_run_rows, labeled_field, ry_to_kj_mol,
 )
 
 
@@ -118,6 +119,7 @@ def _qe_cell_atom_count(row: dict) -> int | None:
 
 
 _MAX_TRAJ_BYTES = 10 * 1024 * 1024
+_TABLE_MIN_WIDTH = "1900px"  # wide enough for every header; narrower windows scroll sideways
 
 
 def _trajectory_link_html(rows: list[dict]) -> str:
@@ -147,7 +149,7 @@ def _trajectory_link_html(rows: list[dict]) -> str:
     b64 = base64.b64encode(payload).decode("ascii")
     return (
         '<a class="advqm-csv-download" '
-        f'href="data:{mime};base64,{b64}" download="{html.escape(name)}">Download Trajectory</a>'
+        f'href="data:{mime};base64,{b64}" download="{html.escape(name)}">Download Structure Files</a>'
     )
 
 
@@ -155,7 +157,7 @@ def _result_row_widget(row: dict, values: list[str], widths: list[str]) -> widge
     """One results row with a Plot icon; clicking it opens/closes an accordion
     holding the Total Energy vs Optimisation Step graph under the row."""
     cells = [
-        widgets.HTML(html.escape(str(v)), layout=widgets.Layout(width=w))
+        widgets.HTML(html.escape(str(v)), layout=widgets.Layout(width="100%"))
         for v, w in zip(values, widths)
     ]
     out_file = row.get("qe_output_file")
@@ -167,10 +169,13 @@ def _result_row_widget(row: dict, values: list[str], widths: list[str]) -> widge
             "Plot total energy vs optimisation step"
             if energies else "Plot is available for relax / vc-relax runs"
         ),
-        layout=widgets.Layout(width=widths[-1]),
+        layout=widgets.Layout(width="100%"),
     )
     slot = widgets.VBox([])
-    row_box = widgets.HBox(cells + [plot_btn], layout=widgets.Layout(width="100%"))
+    row_box = widgets.HBox(cells + [plot_btn], layout=widgets.Layout(
+        width="100%", min_width=_TABLE_MIN_WIDTH,
+        display="grid", grid_template_columns=grid_columns(widths),
+    ))
     row_box.add_class("advqm-rowlist-row")
 
     def toggle(_b=None) -> None:
@@ -184,7 +189,7 @@ def _result_row_widget(row: dict, values: list[str], widths: list[str]) -> widge
         slot.children = [acc]
 
     plot_btn.on_click(toggle)
-    return widgets.VBox([row_box, slot])
+    return widgets.VBox([row_box, slot], layout=widgets.Layout(overflow="visible"))
 
 
 def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
@@ -238,8 +243,16 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
         dense=True,
         disabled=not completed_rows,
     )
-    csv_download = widgets.HTML()
-    traj_download = widgets.HTML()
+    downloads_html = widgets.HTML()
+    csv_download = types.SimpleNamespace(value="")
+    traj_download = types.SimpleNamespace(value="")
+
+    def _sync_downloads() -> None:
+        # Both links in one inline row so they sit right next to each other.
+        downloads_html.value = (
+            '<div style="display:flex; gap:16px; align-items:center;">'
+            f"{csv_download.value}{traj_download.value}</div>"
+        )
     comparison_note = widgets.HTML()
     comparison_table = widgets.VBox([])
 
@@ -249,6 +262,7 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
         if not rows:
             csv_download.value = ""
             traj_download.value = ""
+            _sync_downloads()
             comparison_note.value = ""
             comparison_table.children = [widgets.HTML(
                 '<div class="advqm-muted" style="padding:12px 0;">'
@@ -327,6 +341,7 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
             'download="multi_cif_results.csv">Download CSV</a>'
         )
         traj_download.value = _trajectory_link_html(rows)
+        _sync_downloads()
         comparison_note.value = (
             ""
             if can_compare else
@@ -334,14 +349,7 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
             "Relative energy needs selected runs with the same parseable CIF formula and QE atom counts."
             "</div>"
         )
-        head = widgets.HTML(
-            '<div class="advqm-rowlist-head">'
-            + "".join(
-                f'<span style="width:{w};">{html.escape(c)}</span>'
-                for w, c in zip(widths, columns + ["Plot"])
-            )
-            + "</div>"
-        )
+        head = widgets.HTML(table_head_html(columns + ["Plot"], widths, _TABLE_MIN_WIDTH))
         comparison_table.children = [head] + table_rows
 
     completed_select.observe(render_comparison, names="v_model")
@@ -354,7 +362,7 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
             "Select completed runs with matching compositions. Relative energy is per mole of formula units."
             "</div>"
         ),
-        widgets.HBox([csv_download, traj_download], layout=widgets.Layout(gap="16px")),
+        downloads_html,
         comparison_note,
         comparison_table,
     ])

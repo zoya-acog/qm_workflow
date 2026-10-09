@@ -24,6 +24,7 @@ try:
         _validate_vdw_options,
         _validate_gpu_options,
         _submit_array_batch,
+        _reset_failed_job,
     )
 except ModuleNotFoundError as exc:
     raise ModuleNotFoundError(
@@ -193,6 +194,9 @@ def build_app_style() -> str:
 :root { --jp-ui-font-size1: 14px !important; --jp-content-font-size1: 15px !important; }
 body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size:14px; overflow-x:hidden; }
 
+/* "Use GPU" checkbox label: bold + black */
+.advqm-gpu-check label, .advqm-gpu-check .v-label { font-weight:700 !important; color:#000 !important; opacity:1 !important; }
+
 /* generic widget polish (still used inside cards / accordions) */
 .widget-button { border-radius:6px; font-weight:600; min-height:34px; }
 .widget-button.mod-primary { background:#1565c0 !important; border-color:#1565c0 !important; color:#fff !important; }
@@ -335,6 +339,14 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 .advqm-rowlist-row.widget-hbox:hover { background:#fafbfc !important; }
 .advqm-rowlist-row.widget-hbox > * { box-sizing:border-box !important; min-width:0 !important; margin:0 !important; }
 .advqm-rowcell-cif span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.advqm-rowcell-wrap, .advqm-rowcell-wrap .widget-html-content { min-width:0; max-width:100%;
+    white-space:normal !important; overflow-wrap:anywhere; word-break:break-all; line-height:1.35; }
+/* Path values: anchored to the left of the column in a slightly narrower box (so the
+   text sits left of centre) yet fully inside the column; wraps, vertically centred by the row. */
+.advqm-rowcell-wrap { width:calc(100% - 40px) !important; max-width:calc(100% - 40px); margin:0 !important; text-align:center; }
+.advqm-rowcell-wrap .widget-html-content, .advqm-rowcell-wrap span { width:100%; text-align:center; }
+/* Calculation Type values: centred in their column */
+.advqm-rowcell-center, .advqm-rowcell-center .widget-html-content, .advqm-rowcell-center span { text-align:center; justify-content:center; }
 .advqm-rowlist-row .widget-button { min-width:0 !important; min-height:28px !important;
     padding:2px 6px !important; }
 

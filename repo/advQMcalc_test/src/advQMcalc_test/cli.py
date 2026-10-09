@@ -696,6 +696,33 @@ def _submit_slurm_script(script_path):
     return match.group(1), stdout
 
 
+_RESUBMITTABLE_SLURM_STATES = ("FAILED", "CANCELLED", "TIMEOUT")
+
+
+def _reset_failed_job(run_dir):
+    """
+    Clear the saved SLURM job of a run whose job FAILED/CANCELLED/TIMEOUT so it
+    can be submitted again (a saved job_id otherwise blocks sbatch on resume).
+    Keeps the staged CIF, QE input and job script. Returns True if reset.
+    """
+    run_ctx = RunContext(Path(run_dir).parent, run_dir=Path(run_dir))
+    state = run_ctx.load_state()
+    crystal = state.get("tasks", {}).get("crystal", {})
+    if crystal.get("job_id") is None or crystal.get("slurm_state") not in _RESUBMITTABLE_SLURM_STATES:
+        return False
+    for key in (
+        "job_id", "slurm_state", "array_job_id", "array_task_id",
+        "submitted_at", "job_submit_stdout", "qe_output", "qe_results",
+    ):
+        crystal.pop(key, None)
+    crystal["status"] = "job_script_generated"
+    run_ctx.save_state(state)
+    result_file = Path(run_dir) / "results" / "crystal_result.json"
+    if result_file.exists():
+        result_file.unlink()
+    return True
+
+
 def _submit_array_batch(run_dirs, base_runs_dir, max_concurrent=0):
     """
     Submit already-prepared runs as ONE SLURM array job.
@@ -739,6 +766,14 @@ def _submit_array_batch(run_dirs, base_runs_dir, max_concurrent=0):
         for line in entries[0][1].read_text().splitlines()
         if line.startswith("#SBATCH")
         and not line.startswith(("#SBATCH --job-name", "#SBATCH --output"))
+    ]
+    # Scripts written before a node was excluded keep their old --exclude line;
+    # the array header decides placement, so always use the current exclude list.
+    from .run_context import GPU_EXCLUDE_NODES
+
+    header = [
+        f"#SBATCH --exclude={GPU_EXCLUDE_NODES}" if line.startswith("#SBATCH --exclude=") else line
+        for line in header
     ]
     throttle = f"%{int(max_concurrent)}" if int(max_concurrent or 0) > 0 else ""
     array_script = batch_dir / "array.slurm"

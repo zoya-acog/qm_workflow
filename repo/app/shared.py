@@ -16,6 +16,47 @@ import ipyvuetify as ipv
 from helpers import _STATUS_MAP, status_badge_html, status_category
 
 DEFAULT_RUNS_DIR = "/mnt/own6d/qe_workflow/data/runs"
+# Every runs folder the app has been used with (the New Calculation page lets the
+# user pick any "Runs Directory"). The Dashboard and Results read all of them, not
+# just the default one, so a batch submitted to another folder still shows up.
+_RUNS_DIRS_FILE = Path(DEFAULT_RUNS_DIR).parent / ".voila_runs_dirs.json"
+
+
+def _stored_runs_dirs() -> list[str]:
+    try:
+        data = json.loads(_RUNS_DIRS_FILE.read_text())
+        return [str(d) for d in data] if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def remember_runs_dir(path) -> None:
+    """Add a runs folder to the list the Dashboard/Results read (best effort)."""
+    try:
+        p = str(Path(path).resolve())
+        if p == str(Path(DEFAULT_RUNS_DIR).resolve()):
+            return
+        dirs = _stored_runs_dirs()
+        if p in dirs:
+            return
+        dirs.append(p)
+        tmp = _RUNS_DIRS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(dirs, indent=2))
+        tmp.replace(_RUNS_DIRS_FILE)
+    except Exception:
+        pass
+
+
+def known_runs_dirs() -> list[Path]:
+    out, seen = [], set()
+    for d in [DEFAULT_RUNS_DIR, *_stored_runs_dirs()]:
+        p = Path(d)
+        if p.is_dir() and str(p.resolve()) not in seen:
+            seen.add(str(p.resolve()))
+            out.append(p)
+    return out
+
+
 _SYSTEM_PARAM_KEYS = (
     "input_dft", "vdw_corr", "xdm_a1", "xdm_a2", "ecutwfc", "ecutrho",
     "occupations", "smearing", "degauss",
@@ -155,9 +196,21 @@ def grid_columns(widths: list[str]) -> str:
 def table_head_html(labels: list[str], widths: list[str], min_width: str | None = None, info: dict | None = None) -> str:
     """Header row of a row-list table: same grid as the rows beneath it."""
     info = info or {}
-    cells = "".join(
-        f"<span>{html.escape(label)}{info.get(label, '')}</span>" for label in labels
-    )
+    def _cell(label: str) -> str:
+        icon = info.get(label)
+        if not icon:
+            return f"<span>{html.escape(label)}</span>"
+        # Label may truncate with an ellipsis, but the info icon must never be
+        # clipped, so it sits outside the truncating span and cannot shrink.
+        return (
+            '<span style="display:flex; align-items:center; overflow:visible; margin-left:-10px;">'
+            f'<span style="min-width:0; overflow:hidden; text-overflow:ellipsis; '
+            f'white-space:nowrap;">{html.escape(label)}</span>'
+            f'<span style="flex:0 0 auto; overflow:visible; padding:0 0 0 4px;">{icon.strip()}</span>'
+            "</span>"
+        )
+
+    cells = "".join(_cell(label) for label in labels)
     return (
         f'<div class="advqm-rowlist-head" style="display:grid; '
         f'grid-template-columns:{grid_columns(widths)};'
@@ -276,6 +329,17 @@ CALC_TYPE_LABELS = {
 
 def _fmt_calc_type(v) -> str:
     return _fmt(CALC_TYPE_LABELS.get(v, v))
+
+
+def list_rows_all_dirs(only_successful: bool = False) -> list[dict]:
+    """Run rows from the default runs folder plus every remembered one."""
+    rows, seen = [], set()
+    for base in known_runs_dirs():
+        for r in _list_all_run_rows(base, only_successful=only_successful):
+            if r.get("run_path") not in seen:
+                seen.add(r.get("run_path"))
+                rows.append(r)
+    return rows
 
 
 def _fmt(v) -> str:

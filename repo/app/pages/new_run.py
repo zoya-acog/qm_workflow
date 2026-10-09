@@ -1,5 +1,6 @@
 """New Calculation submission page (single-CIF upload and multi-CIF folder modes)."""
 
+import html
 import json
 import re
 import threading
@@ -23,6 +24,7 @@ from helpers import (
 )
 from shared import (
     CALC_TYPE_LABELS, DEFAULT_RUNS_DIR, _Nav, _last_run_error, _list_all_run_rows, _run_log, labeled_field,
+    remember_runs_dir,
 )
 
 
@@ -39,6 +41,7 @@ def _build_new_run_page(nav: _Nav):
     sample_cif = Path(__file__).parent / "samples" / "sample.cif"
     sample_selection = {"path": None}
     sample_message = widgets.HTML('<span class="advqm-muted"></span>')
+    upload_message = widgets.HTML()
     multi_cif_dir_w = ipv.TextField(
         label="CIF Folder Path",
         v_model="",
@@ -86,7 +89,8 @@ def _build_new_run_page(nav: _Nav):
     mem_w = ipv.TextField(label="Memory Per CPU (GB)", v_model="4", outlined=True, dense=True,
                           placeholder="e.g. 4 (use 8+ for >100 atoms)")
     qe_cmd_w = ipv.TextField(label="QE Command", v_model="pw.x", outlined=True, dense=True)
-    use_gpu_w = ipv.Checkbox(label="Use GPU", v_model=False, dense=True)
+    use_gpu_w = ipv.Checkbox(label="Use GPU", v_model=False, dense=True, hide_details=True,
+                             class_="advqm-gpu-check")
     gpu_type_w = ipv.Select(
         label="GPU Type",
         items=[
@@ -157,6 +161,7 @@ def _build_new_run_page(nav: _Nav):
     attach_log_handler(run_log)
 
     def clear_upload() -> None:
+        upload_message.value = ""
         # ipywidgets 7 makes FileUpload.value read-only; clear its synced
         # metadata/data and bump the counter to reset the browser file input.
         if hasattr(upload, "metadata") and hasattr(upload, "data"):
@@ -167,9 +172,21 @@ def _build_new_run_page(nav: _Nav):
             upload.value = ()
 
     def on_upload_change(change) -> None:
-        if change.get("new"):
+        new = change.get("new")
+        if new:
             sample_selection["path"] = None
             sample_message.value = ""
+            # ipywidgets 8: tuple of dicts; ipywidgets 7: {filename: meta}
+            first = new[0] if isinstance(new, (tuple, list)) else next(iter(new.values()), {})
+            name = first.get("name") if isinstance(first, dict) else None
+            if not name and isinstance(new, dict):
+                name = next(iter(new), None)
+            upload_message.value = (
+                '<span style="color:#2e7d32; font-weight:600;">&#10004; '
+                f'{html.escape(str(name or "file"))}</span>'
+            )
+        else:
+            upload_message.value = ""
 
     upload.observe(on_upload_change, names="value")
 
@@ -232,6 +249,7 @@ def _build_new_run_page(nav: _Nav):
                 return
         run_btn.disabled = True
         base_runs = Path(runs_dir_w.v_model)
+        remember_runs_dir(base_runs)  # so the Dashboard/Results also read this folder
         if input_tabs.selected_index == 0:
             sample_path = sample_selection["path"]
             if sample_path is not None:
@@ -492,6 +510,7 @@ def _build_new_run_page(nav: _Nav):
     single_file_panel = widgets.VBox([
         widgets.HTML('<div class="advqm-muted">Upload a single .cif structure from your computer.</div>'),
         upload,
+        upload_message,
         sample_message,
     ])
     single_file_panel.add_class("advqm-file-panel")
@@ -528,7 +547,12 @@ def _build_new_run_page(nav: _Nav):
         [
             _ipv_row(walltime_w, ntasks_w, qe_cmd_w),
             _ipv_row(mem_w, maxconc_w),
-            _ipv_row(use_gpu_w, gpu_type_w, gpus_w),
+            # "Use GPU" and its two options packed together, not spread over thirds.
+            ipv.Row(children=[
+                ipv.Col(children=[use_gpu_w], style_="flex:0 0 auto; padding:0 16px 8px 8px;"),
+                ipv.Col(children=[labeled_field(gpu_type_w)], style_="flex:0 0 240px; min-width:0; padding:0 8px;"),
+                ipv.Col(children=[labeled_field(gpus_w)], style_="flex:0 0 240px; min-width:0; padding:0 8px;"),
+            ], style_="margin:0 -8px; align-items:flex-end; flex-wrap:wrap;"),
         ]
     )
     slurm_card.add_class("advqm-card")

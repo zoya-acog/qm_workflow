@@ -11,6 +11,8 @@ from IPython.display import HTML, display
 from helpers import (
     _process_single_cif,
     _query_slurm_job,
+    _reset_failed_job,
+    _submit_array_batch,
     build_namespace,
     load_run_state,
     resume_target,
@@ -21,7 +23,6 @@ from shared import (
     batch_status_html,
     grid_columns,
     table_head_html,
-    cif_list_text,
     group_cif_names,
     group_rows,
     labeled_field,
@@ -34,11 +35,12 @@ from shared import (
     _last_run_error,
     _list_all_run_rows,
     _run_log,
+    known_runs_dirs,
     DEFAULT_RUNS_DIR,
 )
 
 
-_ROW_COL_WIDTHS = ["10%", "16%", "20%", "18%", "12%", "12%", "5%", "7%"]
+_ROW_COL_WIDTHS = ["10%", "16%", "20%", "16%", "14%", "12%", "5%", "7%"]
 _TABLE_MIN_WIDTH = "1100px"  # below this the table scrolls sideways
 
 
@@ -54,6 +56,24 @@ _CALC_TYPE_INFO = (
 )
 
 
+_CIF_CELL_MAX = 20
+
+
+def _cif_cell_text(names: list[str]) -> str:
+    """CIF File column text, limited to 20 characters of content.
+
+    One CIF: its name, cut at 20 characters. Several CIFs: the names inside
+    curly braces, "{a.cif, b.cif, ...}"; when the names exceed 20 characters
+    they are cut and "..." is appended before the closing brace.
+    """
+    if len(names) == 1:
+        return names[0][:_CIF_CELL_MAX]
+    inner = ", ".join(names)
+    if len(inner) > _CIF_CELL_MAX:
+        inner = inner[:_CIF_CELL_MAX] + "..."
+    return "{" + inner + "}"
+
+
 def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:
     """One table row: a single run, or one multi-CIF batch (rows sharing an array job)."""
     first = rows[0]
@@ -61,7 +81,7 @@ def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:
     group_row = {**first, "batch_rows": rows} if batch else first
 
     names = group_cif_names(rows)
-    cif_text = cif_list_text(names, compact=True)
+    cif_text = _cif_cell_text(names)
     cif_html = widgets.HTML(
         f'<span title="{html.escape(", ".join(names))}">{html.escape(cif_text)}</span>',
         layout=widgets.Layout(width="100%"),
@@ -93,15 +113,21 @@ def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:
         if batch
         else widgets.HTML(_effective_status_html(first), layout=widgets.Layout(width="100%"))
     )
+    # Long paths wrap inside their own cell (no truncation) so they never
+    # run over the Calculation Type column.
+    path_html = widgets.HTML(
+        f'<span title="{html.escape(cif_dir or "")}">{html.escape(cif_dir or "")}</span>',
+        layout=widgets.Layout(width="100%"),
+    )
+    path_html.add_class("advqm-rowcell-wrap")
+    calc_html = widgets.HTML(html.escape(_fmt(first.get("calc_type"))), layout=widgets.Layout(width="100%"))
+    calc_html.add_class("advqm-rowcell-center")
     cells = [
         widgets.HTML(html.escape(_fmt(job_id)), layout=widgets.Layout(width="100%")),
         widgets.HTML(html.escape(_fmt(run_id_text)), layout=widgets.Layout(width="100%")),
         cif_html,
-        widgets.HTML(
-            f'<span title="{html.escape(cif_dir or "")}">{html.escape(cif_dir or "")}</span>',
-            layout=widgets.Layout(width="100%"),
-        ),
-        widgets.HTML(html.escape(_fmt(first.get("calc_type"))), layout=widgets.Layout(width="100%")),
+        path_html,
+        calc_html,
         status_html,
         open_btn,
         load_results_btn,
@@ -118,16 +144,12 @@ def _build_runs_page(nav: _Nav):
     header = widgets.HTML(
         '<div class="advqm-page-header">'
         '<div><div class="advqm-page-title">Runs</div>'
-        '<div class="advqm-page-sub">All workflow runs and their current status</div></div>'
+        '<div class="advqm-page-sub">Jobs &amp; Their Current Status</div></div>'
         "</div>"
     )
     new_run_btn = widgets.Button(description="New Calculation", button_style="success", icon="plus")
     new_run_btn.on_click(lambda _: nav.show("new_run"))
 
-    runs_dir_w = ipv.TextField(
-        label="Runs Directory", v_model=DEFAULT_RUNS_DIR, outlined=True, dense=True,
-        layout=widgets.Layout(width="60%"),
-    )
     search_w = ipv.TextField(
         label="Search Runs", v_model="", placeholder="Search by CIF name or job ID...",
         outlined=True, dense=True, layout=widgets.Layout(width="60%"),
@@ -159,12 +181,35 @@ def _build_runs_page(nav: _Nav):
     resume_target_w = widgets.Dropdown(
         options=[
             ("Latest run for this CIF", "latest"),
-            ("Selected run ID", "run_id"),
+            ("Selected CIF file", "cif"),
             ("Selected run folder path", "run_path"),
         ],
-        value="run_id",
+        value="cif",
         description="Resume target",
         layout=widgets.Layout(width="100%"),
+    )
+    # CIF checkboxes (shown for "Selected CIF file"): the CIFs of the job opened with
+    # the gear icon; tick the ones to resume (each resumes its own run of that job).
+    cif_checks: dict[str, widgets.Checkbox] = {}
+    cif_target: dict[str, Path] = {}
+    cif_list_box = widgets.VBox(
+        [], layout=widgets.Layout(max_height="220px", overflow_y="auto", width="100%",
+                                  padding="4px 0")
+    )
+    cif_select_all_btn = widgets.Button(description="Select all", layout=widgets.Layout(width="auto"))
+    cif_clear_btn = widgets.Button(description="Clear", layout=widgets.Layout(width="auto"))
+    cif_title_w = widgets.HTML('<div style="font-weight:600; margin:6px 0 2px;">CIF files to resume</div>')
+    cif_picker = widgets.VBox([
+        cif_title_w, widgets.HBox([cif_select_all_btn, cif_clear_btn]), cif_list_box,
+    ])
+
+    def _toggle_cif_picker(*_):
+        cif_picker.layout.display = "" if resume_target_w.value == "cif" else "none"
+
+    resume_target_w.observe(_toggle_cif_picker, names="value")
+    _toggle_cif_picker()
+    resubmit_failed_w = widgets.Checkbox(
+        value=False, description="Resubmit if SLURM job failed",
     )
     force_pp_resume_w = widgets.Checkbox(
         value=False, description="Force pseudopotential cleanup",
@@ -172,15 +217,56 @@ def _build_runs_page(nav: _Nav):
     resume_note_w = widgets.HTML(
         '<span class="advqm-muted">Resume reuses the saved run settings. '
         "If a SLURM job was already submitted, resume will not submit a new job; "
-        "forced cleanup rewrites the QE input only.</span>"
+        "forced cleanup rewrites the QE input only. \"Resubmit if SLURM job failed\" clears the saved job of "
+        "failed/cancelled/timed-out runs and submits them again. With \"Selected CIF file\", tick the CIF "
+        "files of the selected job to resume.</span>"
     )
     state_out = widgets.Output()
+
+    def _cif_name_of(cif) -> str:
+        return Path(cif or "?").name
+
+    def _rebuild_cif_checks(job_runs: dict[str, Path]) -> None:
+        """Checkbox list for ONE job: the CIF files of the run(s) opened with the
+        gear icon (a multi-CIF batch lists all its CIFs), all ticked by default.
+        Each CIF resumes its own run from that job."""
+        cif_target.clear()
+        cif_target.update(job_runs)
+        cif_checks.clear()
+        for name in sorted(job_runs, key=str.lower):
+            crystal = (load_run_state(job_runs[name]) or {}).get("tasks", {}).get("crystal", {})
+            state_txt = crystal.get("slurm_state") or crystal.get("status") or "not submitted"
+            cif_checks[name] = widgets.Checkbox(
+                value=True, description=f"{name}  —  {state_txt}", indent=False,
+                style={"description_width": "initial"},
+                layout=widgets.Layout(width="100%", margin="0"),
+            )
+        cif_list_box.children = list(cif_checks.values()) or [
+            widgets.HTML('<span class="advqm-muted">Click the ⚙ icon on a run to list its CIF files.</span>')
+        ]
+
+    def _ticked_runs() -> dict[str, Path]:
+        return {name: cif_target[name] for name, cb in cif_checks.items() if cb.value}
+
+    def _set_all_ticks(value: bool) -> None:
+        for cb in cif_checks.values():
+            cb.value = value
+
+    cif_select_all_btn.on_click(lambda _: _set_all_ticks(True))
+    cif_clear_btn.on_click(lambda _: _set_all_ticks(False))
 
     def _select_run(rp: Path, label: str, paths: list | None = None) -> None:
         selected_run["path"] = rp
         selected_run["paths"] = list(paths) if paths else [rp]
         selected_run["label"] = label
         selected_label_w.value = f'<b>Selected run:</b> {label}'
+        job_runs: dict[str, Path] = {}
+        for p in selected_run["paths"]:
+            name = _cif_name_of((load_run_state(p) or {}).get("cif"))
+            if name in job_runs:  # same CIF twice in one job: tell them apart by run folder
+                name = f"{name} ({p.name})"
+            job_runs[name] = p
+        _rebuild_cif_checks(job_runs)
         show_state()
 
     def show_state(_=None):
@@ -257,9 +343,25 @@ def _build_runs_page(nav: _Nav):
                 msgs.append(f"Job {jid}: query failed ({e})")
         job_status.value = " | ".join(msgs)
 
+    def _scan_dirs() -> list[Path]:
+        """Folders the table reads: the default runs folder plus every folder a
+        batch was submitted to (picked as Runs Directory on New Calculation)."""
+        return known_runs_dirs()
+
+    def _base_for(rp: Path) -> Path:
+        """The runs folder a given run lives under."""
+        rp_res = Path(rp).resolve()
+        for d in _scan_dirs():
+            try:
+                if d.resolve() in rp_res.parents:
+                    return d
+            except OSError:
+                continue
+        return Path(DEFAULT_RUNS_DIR)
+
     def _resume_one(rp: Path, mode: str, force_pp: bool) -> None:
         label = rp.parent.name
-        base = Path(runs_dir_w.v_model)
+        base = _base_for(rp)
         sel_runs_dir, sel_run_id = resume_target(base, label, rp)
         if mode == "latest":
             runs_dir, run_id, run_path = sel_runs_dir, None, None
@@ -282,26 +384,67 @@ def _build_runs_page(nav: _Nav):
         _process_single_cif(rp, runs_dir, ns)
 
     def on_resume(_=None):
-        paths = selected_run["paths"] or ([selected_run["path"]] if selected_run["path"] else [])
-        if not paths:
-            job_status.value = "No run selected — click the ⚙ icon on a run above."
-            return
         mode = resume_target_w.value
         force_pp = bool(force_pp_resume_w.value)
+        if mode == "cif":
+            ticked = _ticked_runs()
+            if not ticked:
+                job_status.value = "Tick at least one CIF file to resume."
+                return
+            targets = [(name, rp, "run_path") for name, rp in ticked.items()]
+        else:
+            paths = selected_run["paths"] or ([selected_run["path"]] if selected_run["path"] else [])
+            if not paths:
+                job_status.value = "No run selected — click the ⚙ icon on a run above."
+                return
+            targets = [(rp.name, rp, mode) for rp in paths]
+        resubmit = bool(resubmit_failed_w.value)
         job_status.value = (
-            f"Resuming {len(paths)} run(s) ({mode}, "
-            f"{'force PP cleanup' if force_pp else 'keeping saved PP files'})..."
+            f"Resuming {len(targets)} run(s) ({mode}, "
+            f"{'force PP cleanup' if force_pp else 'keeping saved PP files'}"
+            f"{', resubmit failed' if resubmit else ''})..."
         )
         resume_btn.disabled = True
 
+        notes: list[str] = []
+
         def work():
             try:
-                for rp in paths:
+                if resubmit:
+                    # Failed/cancelled/timed-out jobs: clear the saved job and
+                    # submit them again together as one new SLURM array.
+                    reset_dirs, remaining = [], []
+                    for name, rp, run_mode in targets:
+                        try:
+                            if _reset_failed_job(rp):
+                                reset_dirs.append(rp)
+                                continue
+                        except Exception as e:
+                            _run_log(f"Could not reset {name}: {e}")
+                        remaining.append((name, rp, run_mode))
+                    if reset_dirs:
+                        try:
+                            array_id = _submit_array_batch(reset_dirs, _base_for(reset_dirs[0]), 0)
+                            _run_log(f"Resubmitted {len(reset_dirs)} failed run(s) as SLURM array job {array_id}")
+                            notes.append(f"Resubmitted {len(reset_dirs)} failed run(s) as SLURM array job {array_id}.")
+                        except Exception as e:
+                            _run_log(f"Resubmission failed: {e}")
+                            notes.append(f"Resubmission failed: {e}")
+                    else:
+                        _run_log("No failed SLURM jobs among the selected runs; resuming normally")
+                        notes.append("None of the ticked runs has a failed SLURM job, so nothing was resubmitted.")
+                    targets_to_resume = remaining
+                else:
+                    targets_to_resume = targets
+                for name, rp, run_mode in targets_to_resume:
                     try:
-                        _resume_one(rp, mode, force_pp)
+                        _resume_one(rp, run_mode, force_pp)
                     except Exception as e:
-                        _run_log(f"Resume failed for {rp.name}: {e}")
+                        _run_log(f"Resume failed for {name}: {e}")
+                        notes.append(f"Resume failed for {name}: {e}")
+                notes.append(f"Resume finished for {len(targets_to_resume)} run(s).")
             finally:
+                job_status.value = " ".join(notes) or "Done."
                 resume_btn.disabled = False
 
         threading.Thread(target=work, daemon=True).start()
@@ -311,7 +454,7 @@ def _build_runs_page(nav: _Nav):
 
     monitor_body = widgets.VBox(
         [selected_label_w, widgets.HBox([job_status, query_btn, resume_btn]),
-         resume_target_w, force_pp_resume_w, resume_note_w, state_out]
+         resume_target_w, cif_picker, force_pp_resume_w, resubmit_failed_w, resume_note_w, state_out]
     )
     monitor_acc = widgets.Accordion(children=[monitor_body])
     monitor_acc.set_title(0, "Monitor & Resume a run")
@@ -382,15 +525,14 @@ def _build_runs_page(nav: _Nav):
 
     def refresh(_=None):
         nonlocal current_rows
-        base = Path(runs_dir_w.v_model)
-        if not base.is_dir():
-            current_rows = []
-            rows_box.children = [
-                widgets.HTML(f'<div class="advqm-muted" style="padding:16px;">Runs dir does not exist: {base}</div>')
-            ]
-            return
+        dirs = _scan_dirs()
+        rows, seen = [], set()
         try:
-            rows = _list_all_run_rows(base, only_successful=False)
+            for d in dirs:
+                for r in _list_all_run_rows(d, only_successful=False):
+                    if r.get("run_path") not in seen:
+                        seen.add(r.get("run_path"))
+                        rows.append(r)
         except Exception as e:
             current_rows = []
             rows_box.children = [
@@ -430,6 +572,10 @@ def _build_runs_page(nav: _Nav):
             pseudo_dir=crystal.get("pseudo_dir"),
             pp_map=None,
             force_pp_cleanup=False,
+            # Refresh only monitors. Runs that are prepared but not yet submitted
+            # (waiting for their batch's SLURM array) must not be sent to SLURM
+            # one by one here.
+            defer_submit=True,
             **{key: (crystal.get("system_params") or {}).get(key)
                for key in _SYSTEM_PARAM_KEYS},
         )
@@ -442,12 +588,11 @@ def _build_runs_page(nav: _Nav):
         refresh_btn.disabled = True
         refresh_btn.description = "Refreshing…"
         refresh()
-        base = Path(runs_dir_w.v_model)
         stale = [r for r in current_rows if status_category(r.get("crystal_status")) in ("info", "warning")]
 
         def work():
             for r in stale:
-                _resolve_one_stale(r, base)
+                _resolve_one_stale(r, _base_for(Path(r["run_path"])) if r.get("run_path") else None)
             refresh()
             refresh_btn.disabled = False
             refresh_btn.description = "Refresh"
@@ -482,7 +627,7 @@ def _build_runs_page(nav: _Nav):
             widgets.HBox(
                 [new_run_btn], layout=widgets.Layout(padding="0 0 12px 0")
             ),
-            widgets.HBox([labeled_field(runs_dir_w, "flex:1; min-width:0;"), refresh_btn]),
+            widgets.HBox([refresh_btn]),
             labeled_field(search_w),
             filter_card,
             rows_wrap,

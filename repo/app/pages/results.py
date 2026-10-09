@@ -17,7 +17,7 @@ from IPython.display import HTML, display
 from helpers import load_run_state
 from shared import (
     DEFAULT_RUNS_DIR, cif_list_text, energy_plot_html, energy_vs_step, group_cif_names, group_rows,
-    grid_columns, table_head_html, trajectory_xsf, RY_TO_KJ_MOL, _Nav, _fmt, _list_all_run_rows, labeled_field, ry_to_kj_mol,
+    grid_columns, table_head_html, trajectory_xsf, RY_TO_KJ_MOL, _Nav, _fmt, _list_all_run_rows, list_rows_all_dirs, labeled_field, ry_to_kj_mol,
 )
 
 
@@ -195,14 +195,12 @@ def _result_row_widget(row: dict, values: list[str], widths: list[str]) -> widge
 def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
     header = widgets.HTML(
         '<div class="advqm-page-header">'
-        '<div><div class="advqm-page-title">Results</div>'
-        '<div class="advqm-page-sub">Compare completed runs and download a CSV. '
-        'Use Runs to monitor jobs.</div></div>'
+        '<div><div class="advqm-page-title">Results</div></div>'
         "</div>"
     )
 
     try:
-        completed_rows = _list_all_run_rows(Path(DEFAULT_RUNS_DIR), only_successful=True)
+        completed_rows = list_rows_all_dirs(only_successful=True)
     except Exception:
         completed_rows = []
     completed_rows.sort(key=lambda r: (r.get("run_id") or "", r.get("cif") or ""), reverse=True)
@@ -232,17 +230,31 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
         label for label, grp in groups_by_label.items()
         if any(r.get("run_path") in preselect_paths for r in grp)
     ]
-    completed_select = ipv.Select(
-        label="Completed Runs to Compare",
-        items=list(groups_by_label),
-        v_model=selected_labels,
-        multiple=True,
-        chips=True,
-        clearable=True,
-        outlined=True,
-        dense=True,
-        disabled=not completed_rows,
-    )
+    selection = {"labels": list(selected_labels)}
+    select_holder = widgets.VBox([])
+
+    def _make_select(v_model):
+        sel = ipv.Select(
+            label="Select Job to Display and Download Results",
+            items=list(groups_by_label),
+            v_model=v_model,
+            multiple=True,
+            chips=True,
+            clearable=True,
+            outlined=True,
+            dense=True,
+            disabled=not completed_rows,
+        )
+        sel.observe(_on_select, names="v_model")
+        return sel
+
+    def _on_select(change) -> None:
+        selection["labels"] = list(change["new"] or [])
+        render_comparison()
+        # A multi-select keeps its menu open after each pick. Swapping in a
+        # fresh widget (same selection) closes it, so no extra click is needed.
+        select_holder.children = [labeled_field(_make_select(selection["labels"]))]
+
     downloads_html = widgets.HTML()
     csv_download = types.SimpleNamespace(value="")
     traj_download = types.SimpleNamespace(value="")
@@ -257,7 +269,7 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
     comparison_table = widgets.VBox([])
 
     def render_comparison(_=None) -> None:
-        selected = completed_select.v_model or []
+        selected = selection["labels"]
         rows = [r for label in selected if label in groups_by_label for r in groups_by_label[label]]
         if not rows:
             csv_download.value = ""
@@ -289,7 +301,11 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
                 "row": row,
                 "metadata": metadata,
                 "formula": formula[0] if formula else None,
-                "per_formula_energy": per_formula_energy,
+                "per_formula_energy": per_formula_energy,  # Ry per formula unit
+                # Convert Ry -> kJ/mol first; the relative energy is then taken in kJ/mol.
+                "per_formula_kj": (
+                    ry_to_kj_mol(per_formula_energy) if per_formula_energy is not None else None
+                ),
             })
         formulas = {item["formula"] for item in row_data}
         can_compare = (
@@ -300,12 +316,12 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
         if can_compare:
             # Default (and only) order: relative energy, lowest to highest.
             row_data.sort(key=lambda item: item["per_formula_energy"])
-        min_energy = min(item["per_formula_energy"] for item in row_data) if can_compare else None
+        min_kj = min(item["per_formula_kj"] for item in row_data) if can_compare else None
         columns = [
             "CIF Name", "Space Group", "Cell Parameters", "k-points",
             "Energy (kJ/mol)", "Relative Energy (kJ/mol)", "SLURM State", "SLURM Job ID",
         ]
-        widths = ["14%", "10%", "18%", "9%", "12%", "12%", "8%", "8%", "9%"]
+        widths = ["10%", "10%", "26%", "10%", "11%", "12%", "7%", "7%", "7%"]
         csv_buffer = io.StringIO(newline="")
         writer = csv.writer(csv_buffer)
         writer.writerow(columns)
@@ -315,7 +331,7 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
             metadata = item["metadata"]
             energy = row.get("energy_ry")
             relative = (
-                (item["per_formula_energy"] - min_energy) * RY_TO_KJ_MOL
+                item["per_formula_kj"] - min_kj
                 if can_compare
                 else None
             )
@@ -324,7 +340,11 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
                 metadata["space_group"],
                 metadata["cell_parameters"],
                 row.get("kpoints") or "–",
-                f"{ry_to_kj_mol(float(energy)):.4f}" if isinstance(energy, (int, float)) else "–",
+                # Energy per formula unit (same basis as Relative Energy, so the two
+                # columns subtract consistently); falls back to the whole-cell energy
+                # only when the formula units cannot be determined.
+                f"{item['per_formula_kj'] if item['per_formula_kj'] is not None else ry_to_kj_mol(float(energy)):.4f}"
+                if isinstance(energy, (int, float)) else "–",
                 f"{relative:.4f}" if relative is not None else "–",
                 row.get("slurm_state") or "–",
                 row.get("array_job_id") or row.get("job_id") or "–",
@@ -352,16 +372,10 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
         head = widgets.HTML(table_head_html(columns + ["Plot"], widths, _TABLE_MIN_WIDTH))
         comparison_table.children = [head] + table_rows
 
-    completed_select.observe(render_comparison, names="v_model")
+    select_holder.children = [labeled_field(_make_select(selection["labels"]))]
     render_comparison()
     comparison_card = widgets.VBox([
-        widgets.HTML('<div class="advqm-card-title">Multi-run results</div>'),
-        labeled_field(completed_select),
-        widgets.HTML(
-            '<div class="advqm-muted" style="margin:8px 0;">'
-            "Select completed runs with matching compositions. Relative energy is per mole of formula units."
-            "</div>"
-        ),
+        select_holder,
         downloads_html,
         comparison_note,
         comparison_table,

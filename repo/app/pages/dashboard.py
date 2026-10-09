@@ -16,15 +16,14 @@ from shared import (
     group_rows,
     _effective_status_html,
     _fmt,
-    _list_all_run_rows,
+    list_rows_all_dirs,
 )
 
 
 def _build_dashboard_page(nav: _Nav):
     header = widgets.HTML(
         '<div class="advqm-page-header">'
-        '<div><div class="advqm-page-title">Dashboard</div>'
-        '<div class="advqm-page-sub">Overview of your Quantum ESPRESSO calculation workflow</div></div>'
+        '<div><div class="advqm-page-title">Dashboard</div></div>'
         "</div>"
     )
     new_run_btn = widgets.Button(description="New Calculation", button_style="success", icon="plus")
@@ -37,7 +36,7 @@ def _build_dashboard_page(nav: _Nav):
         base = Path(DEFAULT_RUNS_DIR)
         stats_out.clear_output()
         recent_out.clear_output()
-        rows = _list_all_run_rows(base) if base.is_dir() else []
+        rows = list_rows_all_dirs()
         n_success = sum(status_category(r.get("crystal_status")) == "success" for r in rows)
         n_progress = sum(status_category(r.get("crystal_status")) in ("info", "warning") for r in rows)
         n_failed = sum(status_category(r.get("crystal_status")) == "danger" for r in rows)
@@ -77,8 +76,8 @@ def _build_dashboard_page(nav: _Nav):
                     status = _effective_status_html(first)
                 entries.append(
                     f'<div class="advqm-list-row"><div><b>{title}</b>'
-                    f'<div class="advqm-muted">{html.escape(_fmt(run))} &middot; '
-                    f'job {html.escape(_fmt(job))}</div></div>{status}</div>'
+                    f'<div class="advqm-muted">job {html.escape(_fmt(job))} &middot; '
+                    f'{html.escape(_fmt(run))}</div></div>{status}</div>'
                 )
             items = "".join(entries)
             display(HTML(

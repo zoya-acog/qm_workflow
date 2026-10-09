@@ -13,6 +13,11 @@ CPU_IMAGE_TAR = "/mnt/own6d/qe_workflow/data/gpu-build/advqm-qe-cpu-7.2.tar"
 GPU_IMAGE = "advqm-qe-gpu:7.3.1"
 GPU_IMAGE_TAR = "/mnt/own6d/qe_workflow/data/gpu-build/advqm-qe-gpu-7.3.1.tar"
 DATA_ROOT = "/mnt/own6d/qe_workflow/data"
+# GPU nodes jobs must avoid. own3: GTX 1080 Ti has no kernels in the GPU image.
+# own10: our user is not in the docker group there. own5: Docker cannot find the
+# NVIDIA CDI device spec ('could not select device driver "cdi"'); remove it from
+# this list once an admin has fixed the node.
+GPU_EXCLUDE_NODES = "own3,own5,own10"
 
 
 
@@ -112,7 +117,7 @@ class RunContext:
             partition_line = "#SBATCH --partition=pgpu"
             # own3: GTX 1080 Ti (cc6.1) has no kernels in the GPU image.
             # own10: our user is not in the docker group there.
-            nodelist_line = f"#SBATCH --gres={gres}\n{pad}#SBATCH --exclude=own3,own10"
+            nodelist_line = f"#SBATCH --gres={gres}\n{pad}#SBATCH --exclude={GPU_EXCLUDE_NODES}"
             cpus_per_task = 4
             ntasks = gpus
             device_arg = "--device nvidia.com/gpu=all "

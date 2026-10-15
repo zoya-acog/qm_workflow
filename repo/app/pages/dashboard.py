@@ -77,7 +77,8 @@ def _build_dashboard_page(nav: _Nav):
                 entries.append(
                     f'<div class="advqm-list-row"><div><b>{title}</b>'
                     f'<div class="advqm-muted">job {html.escape(_fmt(job))} &middot; '
-                    f'{html.escape(_fmt(run))}</div></div>{status}</div>'
+                    f'{html.escape(_fmt(run))} &middot; {html.escape(first.get("submitted_by") or "unknown user")}'
+                    f'</div></div>{status}</div>'
                 )
             items = "".join(entries)
             display(HTML(

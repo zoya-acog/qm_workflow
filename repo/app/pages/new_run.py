@@ -38,14 +38,14 @@ def _build_new_run_page(nav: _Nav):
         accept=".cif", multiple=False, description="Upload", icon="upload",
         button_style="primary",
     )
-    sample_cif = Path(__file__).parent / "samples" / "sample.cif"
+    sample_cif = Path(__file__).resolve().parent.parent / "samples" / "benzene.cif"
     sample_selection = {"path": None}
     sample_message = widgets.HTML('<span class="advqm-muted"></span>')
     upload_message = widgets.HTML()
     multi_cif_dir_w = ipv.TextField(
         label="CIF Folder Path",
         v_model="",
-        placeholder="Path visible to the workflow server",
+        placeholder="e.g. /path/to/cif_folder",
         outlined=True,
         dense=True,
     )
@@ -65,14 +65,13 @@ def _build_new_run_page(nav: _Nav):
     log_name_w = ipv.TextField(
         label="Log File Name", v_model="advQMcalc.log", outlined=True, dense=True
     )
-    force_pp_w = widgets.Checkbox(value=False, description="Force pseudopotential cleanup")
     kpoints_w = ipv.TextField(
         label="k-points Grid (Optional)", v_model="",
         placeholder="e.g. 1 1 1 0 0 0 (leave blank to use separation)",
         outlined=True, dense=True,
     )
     ksep_w = ipv.TextField(
-        label="k-point Separation (Preferred)", v_model="0.03",
+        label="k-point Separation (1/Å) (Preferred)", v_model="0.03",
         placeholder="Used when k-points Grid is blank", outlined=True, dense=True,
     )
     pseudo_dir_w = ipv.TextField(label="Pseudopotential Directory",
@@ -129,8 +128,13 @@ def _build_new_run_page(nav: _Nav):
     ecutwfc_w = ipv.TextField(label="Wavefunction Cutoff (Ry)", v_model="",
                                 placeholder="e.g. 50 Ry", outlined=True, dense=True)
     ecutrho_w = ipv.TextField(label="Charge Density Cutoff (Ry)", v_model="",
-                                placeholder="e.g. 600 Ry (8 to 12 times of Wavefunction cutoff)",
                                 outlined=True, dense=True)
+    # Hover text for the ⓘ icon next to a field's caption (keyed by widget id).
+    field_info = {
+        id(ecutwfc_w): "Plane-wave cutoff for wavefunctions (ecutwfc), e.g. 50 Ry.\n"
+                       "Leave blank to use the minimum suggested by the pseudopotential files.",
+        id(ecutrho_w): "e.g. 600 Ry (8 to 12 times the Wavefunction Cutoff)",
+    }
     xdm_a1_w = ipv.TextField(label="XDM a1 (XDM Only)", v_model="",
                              placeholder="e.g. 0.6836", outlined=True, dense=True, disabled=True)
     xdm_a2_w = ipv.TextField(label="XDM a2 (XDM Only)", v_model="",
@@ -153,6 +157,18 @@ def _build_new_run_page(nav: _Nav):
     smearing_w = ipv.TextField(label="Smearing", v_model="", placeholder="e.g. gaussian", outlined=True, dense=True)
     degauss_w = ipv.TextField(label="Degauss (Ry)", v_model="",
                                 placeholder="e.g. 0.05 Ry", outlined=True, dense=True)
+    field_info.update({
+        id(xdm_a1_w): "XDM damping parameter a1 (dimensionless), used only with the XDM vdW correction.\n"
+                      "Autofilled with QE's default 0.6836; the value should match the DFT functional.",
+        id(xdm_a2_w): "XDM damping parameter a2 in Å, used only with the XDM vdW correction.\n"
+                      "Autofilled with QE's default 1.5045; the value should match the DFT functional.",
+        id(occupations_w): "How electronic states are filled, e.g. 'fixed' for insulators or 'smearing' for metals.\n"
+                           "Leave blank to use QE's default ('fixed').",
+        id(smearing_w): "Smearing function, e.g. 'gaussian', 'mv' or 'mp'.\n"
+                        "Used only when Occupations is 'smearing'; QE's default is 'gaussian'.",
+        id(degauss_w): "Smearing width in Ry, e.g. 0.01 to 0.05.\n"
+                       "Used only when Occupations is 'smearing'.",
+    })
 
     run_btn = widgets.Button(description="Submit Run", button_style="success", icon="play")
     reset_btn = widgets.Button(description="Cancel", icon="undo")
@@ -216,10 +232,9 @@ def _build_new_run_page(nav: _Nav):
         use_gpu_w.v_model = False
         gpu_type_w.v_model = ""
         gpus_w.v_model = "1"
-        force_pp_w.value = False
         submitted_by_w.v_model = ""
         run_id_w.v_model = ""
-        vdw_corr_w.v_model = None
+        vdw_corr_w.v_model = "Grimme-D3"
         for field in (input_dft_w, ecutwfc_w, ecutrho_w, xdm_a1_w, xdm_a2_w,
                       occupations_w, smearing_w, degauss_w):
             field.v_model = ""
@@ -346,7 +361,7 @@ def _build_new_run_page(nav: _Nav):
             calc_type=calc_type_w.v_model or "scf",
             runs_dir=str(base_runs),
             log_name=log_name_w.v_model,
-            force_pp_cleanup=force_pp_w.value,
+            force_pp_cleanup=False,  # every new run does the cleanup anyway
             pseudo_dir=(pseudo_dir_w.v_model or "").strip() or None,
             pp_map=(pp_map_w.v_model or "").strip() or None,
             slurm_walltime=walltime_w.v_model,
@@ -494,7 +509,9 @@ def _build_new_run_page(nav: _Nav):
         # Field names sit in a plain label above each input (no floating labels
         # on the border), so the column needs no extra top padding for them.
         def _prep(w):
-            return labeled_field(w) if isinstance(w, (ipv.TextField, ipv.Select)) else w
+            if isinstance(w, (ipv.TextField, ipv.Select)):
+                return labeled_field(w, info=field_info.get(id(w)))
+            return w
 
         return ipv.Row(children=[
             ipv.Col(children=[_prep(w)], style_="flex:1; min-width:0; padding:0 8px;") for w in widgets_
@@ -517,7 +534,7 @@ def _build_new_run_page(nav: _Nav):
     input_tabs.children = [
         single_file_panel,
         widgets.VBox([
-            widgets.HTML('<div class="advqm-muted">Path must be readable from the workflow server.</div>'),
+            widgets.HTML('<div class="advqm-muted">Absolute path to the CIF files in the server (Note: ensure the path is accessible to the application).</div>'),
             _ipv_row(multi_cif_dir_w, cif_glob_w),
         ]),
     ]
@@ -547,12 +564,20 @@ def _build_new_run_page(nav: _Nav):
         [
             _ipv_row(walltime_w, ntasks_w, qe_cmd_w),
             _ipv_row(mem_w, maxconc_w),
-            # "Use GPU" and its two options packed together, not spread over thirds.
+            # "Use GPU" on the same line as its two options. An empty caption above
+            # the checkbox lines it up with the input boxes, not their labels.
             ipv.Row(children=[
-                ipv.Col(children=[use_gpu_w], style_="flex:0 0 auto; padding:0 16px 8px 8px;"),
+                ipv.Col(children=[
+                    ipv.Html(tag="div", children=[" "],
+                             style_="font-size:0.86rem; margin:8px 0 2px 0;"),
+                    ipv.Html(tag="div", children=[use_gpu_w],
+                             style_="height:40px; display:flex; align-items:center;"),
+                # Fixed width: the Vuetify checkbox otherwise stretches to the
+                # full row and pushes the two GPU fields out of view.
+                ], style_="flex:0 0 150px; max-width:150px; padding:0 16px 0 8px;"),
                 ipv.Col(children=[labeled_field(gpu_type_w)], style_="flex:0 0 240px; min-width:0; padding:0 8px;"),
                 ipv.Col(children=[labeled_field(gpus_w)], style_="flex:0 0 240px; min-width:0; padding:0 8px;"),
-            ], style_="margin:0 -8px; align-items:flex-end; flex-wrap:wrap;"),
+            ], style_="margin:0 -8px; align-items:flex-start; flex-wrap:nowrap;"),
         ]
     )
     slurm_card.add_class("advqm-card")
@@ -564,7 +589,6 @@ def _build_new_run_page(nav: _Nav):
             _ipv_row(runs_dir_w),
             _ipv_row(log_name_w),
             _ipv_row(pp_map_w),
-            force_pp_w,
         ]
     )
     additional_content.add_class("advqm-card")

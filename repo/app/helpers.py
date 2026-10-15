@@ -203,8 +203,8 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 .widget-button.mod-success { background:#2e7d32 !important; border-color:#2e7d32 !important; color:#fff !important; }
 .widget-button:hover { filter:brightness(1.05); }
 .widget-upload { border:1.5px dashed #c3cbd6; border-radius:8px; background:#fafbfc; }
-.advqm-file-panel { background:#fafbfc; border:1px dashed #c3cbd6; border-radius:8px;
-    padding:14px 16px; gap:10px; }
+/* No box of its own: the Single CIF File tab already frames the upload area. */
+.advqm-file-panel { padding:6px 2px; gap:10px; }
 .advqm-file-panel .widget-upload,
 .advqm-file-panel .widget-upload.widget-button,
 .advqm-file-panel .widget-upload .widget-button {
@@ -308,10 +308,62 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 .advqm-results-table th:nth-child(2) { min-width:110px; }
 .advqm-results-table th:nth-child(3) { min-width:220px; }
 .advqm-results-table th:nth-child(6) { min-width:150px; }
+/* !important on background: inside ipyvuetify widgets, Vuetify's own link reset
+   (".vuetify-styles a { background-color:transparent }") is more specific. */
 .advqm-csv-download { display:inline-block; margin:4px 0 10px; padding:8px 14px;
-    border-radius:6px; background:#1565c0; color:#fff !important; font-weight:600;
-    text-decoration:none !important; }
-.advqm-csv-download:hover { background:#0f56a4; }
+    border-radius:6px; background:#1565c0 !important; color:#fff !important; font-weight:600;
+    text-decoration:none !important; font-size:14px; line-height:28px;
+    font-family:'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+.advqm-csv-download:hover { background:#0f56a4 !important; }
+/* Results table: cells wrap instead of being cut off / overflowing */
+.advqm-results-row .widget-html-content { white-space:normal; overflow-wrap:anywhere; line-height:1.4; }
+/* Results table: every header and value centred in its column (same side padding
+   on both, so a header sits exactly over its values). */
+.advqm-results-row > .widget-html, .advqm-results-row .widget-html-content { text-align:center; padding:0 4px; }
+/* Results header row (a widget row on the same grid as the rows, so the CIF Name
+   cell can be a sort button); looks like the .advqm-rowlist-head header. */
+.advqm-results-headrow.widget-hbox { padding:12px 16px !important; align-items:center !important;
+    background:#fafbfc; border-bottom:1px solid #e5e9f0 !important; }
+.advqm-results-headrow > * { min-width:0 !important; margin:0 !important; }
+.advqm-results-headrow .widget-html-content { text-align:center; padding:0 4px; white-space:normal;
+    line-height:1.3; font-size:0.9rem; font-weight:700; color:#667085; letter-spacing:0.02em; }
+.advqm-sort-btn.widget-button { background:transparent !important; border:none !important;
+    box-shadow:none !important; color:#667085 !important; font-size:0.9rem !important;
+    font-weight:700 !important; letter-spacing:0.02em; padding:0 4px !important;
+    min-height:0 !important; height:auto !important; cursor:pointer;
+    white-space:nowrap !important; overflow:visible !important; text-overflow:clip !important;
+    line-height:1.3 !important; font-family:inherit !important; }
+.advqm-sort-btn.widget-button:hover { color:#1565c0 !important; filter:none; }
+/* no focus ring after a click (it showed as a blue box round the header) */
+.advqm-sort-btn.widget-button:focus, .advqm-sort-btn.widget-button:focus-visible,
+.advqm-sort-btn.widget-button:active { outline:none !important; box-shadow:none !important; }
+/* sort arrow: smaller than the name, on the same line */
+.advqm-sort-btn.widget-button::after { margin-left:4px; font-size:0.75em; vertical-align:1px; }
+.advqm-sort-btn.advqm-sort-none::after { content:'\\21C5'; opacity:0.6; }
+.advqm-sort-btn.advqm-sort-asc::after { content:'\\25B2'; }
+.advqm-sort-btn.advqm-sort-desc::after { content:'\\25BC'; }
+
+/* loading spinner (shared.loading_html) */
+@keyframes advqm-spin { to { transform:rotate(360deg); } }
+.advqm-loading { display:flex; align-items:center; gap:12px; padding:28px 4px;
+    color:#667085; font-size:0.9rem; }
+.advqm-spinner { width:26px; height:26px; border-radius:50%; border:3px solid #dbe8fa;
+    border-top-color:#1565c0; animation:advqm-spin 0.8s linear infinite; flex:0 0 auto; }
+.advqm-loading-page { justify-content:center; min-height:calc(100vh - 220px); padding:0; }
+.advqm-fill, .advqm-fill > .widget-html-content { width:100% !important; }
+/* Results pagination bar under the table */
+.advqm-pager { justify-content:space-between !important; align-items:center !important;
+    flex-wrap:wrap !important; gap:12px; padding-top:12px; }
+.advqm-pager > *, .advqm-pager .widget-hbox > * { flex:0 0 auto !important; width:auto !important; }
+.advqm-pager .v-pagination__item, .advqm-pager .v-pagination__navigation { box-shadow:none;
+    border:1px solid #e5e9f0; }
+/* ⓘ inside a download button (white, hover shows its title text) */
+.advqm-btn-info { color:#fff; margin-left:8px; cursor:help; font-weight:700; opacity:0.9; }
+.advqm-btn-info:hover { opacity:1; }
+/* Results download links in one row, each only as wide as its content. */
+.advqm-downloads-row { align-items:center !important; gap:16px; flex-wrap:wrap !important;
+    padding-top:12px; }
+.advqm-downloads-row > * { flex:0 0 auto !important; width:auto !important; }
 .advqm-badge { display:inline-block; padding:3px 11px; border-radius:999px;
     font-size:0.72rem; font-weight:700; white-space:nowrap; }
 .advqm-badge-success { background:#e3f6e9; color:#1c7a3d; }
@@ -327,26 +379,37 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 
 /* ── clickable runs row-list (Runs page) ───────────────────────────────── */
 .advqm-rowlist { padding:0 !important; overflow-x:auto !important; overflow-y:hidden; }
+/* The card is the ONLY sideways scroller: the rows box and each row must not scroll on
+   their own, or a trackpad swipe / button focus moves the rows but not the header. */
+.advqm-rowlist > .widget-vbox, .advqm-rowlist-row.widget-hbox { overflow:visible !important; }
 .advqm-rowlist.advqm-rowlist-noscroll { overflow:hidden !important; }
+/* Results table: scroll inside a fixed-height box, so the horizontal scrollbar is
+   always at the bottom of what is on screen (not after the last of many rows). */
+.advqm-rowlist.advqm-rowlist-scroll { max-height:70vh; overflow:auto !important; }
+.advqm-rowlist.advqm-rowlist-scroll > * { flex:0 0 auto !important; }
+.advqm-sticky-head { position:sticky; top:0; z-index:5; background:#fafbfc; }
 .advqm-rowlist-head { display:flex; align-items:center; box-sizing:border-box;
     padding:12px 16px; font-size:0.9rem; font-weight:700; color:#667085;
     letter-spacing:0.02em; border-bottom:1px solid #e5e9f0;
     background:#fafbfc; }
 .advqm-rowlist-head span { box-sizing:border-box; flex:0 1 auto; min-width:0;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:8px; }
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* header and rows share one column gap, so every header sits exactly over its column */
+.advqm-rowlist-head, .advqm-rowlist-row.widget-hbox, .advqm-results-headrow.widget-hbox { column-gap:8px; }
 .advqm-rowlist-row.widget-hbox { padding:10px 16px !important; border-bottom:1px solid #f1f3f7 !important;
     align-items:center !important; font-size:0.95rem !important; }
 .advqm-rowlist-row.widget-hbox:hover { background:#fafbfc !important; }
 .advqm-rowlist-row.widget-hbox > * { box-sizing:border-box !important; min-width:0 !important; margin:0 !important; }
 .advqm-rowcell-cif span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* Path values: wrap inside their own column, left-aligned like their header, with
+   room on the right so a long path does not run up against the next column */
+.advqm-rowcell-wrap .widget-html-content { padding:0 6px; box-sizing:border-box; }
+/* Runs table: every header and value centred in its column */
+.advqm-runs-table .advqm-rowlist-head > span { text-align:center; }
+.advqm-runs-table .advqm-rowlist-row > .widget-html,
+.advqm-runs-table .advqm-rowlist-row .widget-html-content { text-align:center; justify-content:center; }
 .advqm-rowcell-wrap, .advqm-rowcell-wrap .widget-html-content { min-width:0; max-width:100%;
     white-space:normal !important; overflow-wrap:anywhere; word-break:break-all; line-height:1.35; }
-/* Path values: anchored to the left of the column in a slightly narrower box (so the
-   text sits left of centre) yet fully inside the column; wraps, vertically centred by the row. */
-.advqm-rowcell-wrap { width:calc(100% - 40px) !important; max-width:calc(100% - 40px); margin:0 !important; text-align:center; }
-.advqm-rowcell-wrap .widget-html-content, .advqm-rowcell-wrap span { width:100%; text-align:center; }
-/* Calculation Type values: centred in their column */
-.advqm-rowcell-center, .advqm-rowcell-center .widget-html-content, .advqm-rowcell-center span { text-align:center; justify-content:center; }
 .advqm-rowlist-row .widget-button { min-width:0 !important; min-height:28px !important;
     padding:2px 6px !important; }
 

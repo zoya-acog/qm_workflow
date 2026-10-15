@@ -2,15 +2,18 @@
 
 import html
 import threading
+import time
+import uuid
+import zipfile
 from pathlib import Path
+
+import traitlets
 
 import ipywidgets as widgets
 import ipyvuetify as ipv
-from IPython.display import HTML, display
 
 from helpers import (
     _process_single_cif,
-    _query_slurm_job,
     _reset_failed_job,
     _submit_array_batch,
     build_namespace,
@@ -40,11 +43,11 @@ from shared import (
 )
 
 
-_ROW_COL_WIDTHS = ["10%", "16%", "20%", "16%", "14%", "12%", "5%", "7%"]
+_ROW_COL_WIDTHS = ["9%", "14%", "9%", "13%", "16%", "10%", "11%", "6%", "6%", "6%"]
 _TABLE_MIN_WIDTH = "1100px"  # below this the table scrolls sideways
 
 
-_ROW_COL_LABELS = ["Job ID", "Run ID", "CIF File", "Path", "Calculation Type", "Status", "", ""]
+_ROW_COL_LABELS = ["Job ID", "Run ID", "User Name", "CIF File", "Path", "Calculation\nType", "Status", "", "", ""]
 
 
 # ⓘ next to the Calculation Type header: the table shows QE's own keywords, the
@@ -74,6 +77,141 @@ def _cif_cell_text(names: list[str]) -> str:
     return "{" + inner + "}"
 
 
+# Log zips are served by Voila at voila/files/downloads/run_logs_<hex>.zip (the
+# Dockerfile's file_whitelist allows exactly these names); temporary, cleaned after 1 h.
+_LOG_DIR = Path(__file__).resolve().parent.parent / "downloads"
+
+
+def _run_qe_out(run_path: Path) -> Path | None:
+    """The run's QE output: next to its input once copied back, else (a QE job that
+    failed before the copy) the newest work_<jobid>/ copy. None if QE never wrote one."""
+    st = load_run_state(run_path) or {}
+    qe_in = st.get("tasks", {}).get("crystal", {}).get("qe_input")
+    if not qe_in:
+        return None
+    out = (run_path / qe_in).with_suffix(".out")
+    if out.is_file():
+        return out
+    work = sorted(out.parent.glob(f"work_*/{out.name}"), key=lambda p: p.stat().st_mtime)
+    return work[-1] if work else None
+
+
+def _run_logs_zip(rows: list[dict]) -> Path | None:
+    """Zip advQMcalc.log + the QE .out of each run in a Runs-table row (a batch row
+    gets one folder per CIF). None when no run has either file."""
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    for old in _LOG_DIR.glob("run_logs_*.zip"):
+        try:
+            if now - old.stat().st_mtime > 3600:
+                old.unlink()
+        except OSError:
+            pass
+    files = []
+    for r in rows:
+        rp = Path(r.get("run_path") or "")
+        prefix = f"{Path(r.get('cif') or rp.name).stem}/" if len(rows) > 1 else ""
+        log = rp / "logs" / "advQMcalc.log"
+        if log.is_file():
+            files.append((log, prefix + log.name))
+        out = _run_qe_out(rp)
+        if out:
+            files.append((out, prefix + out.name))
+    if not files:
+        return None
+    dest = _LOG_DIR / f"run_logs_{uuid.uuid4().hex}.zip"
+    tmp = dest.with_suffix(".part")
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+        for src, arc in files:
+            zf.write(src, arc)
+    tmp.replace(dest)
+    return dest
+
+
+def _run_error_text(run_path: Path, crystal: dict, max_lines: int = 3) -> str | None:
+    """The actual error of a failed run, in up to 3 lines: QE's own error block
+    from the .out, else error lines from the SLURM job log (Docker/MPI/node)."""
+    lines: list[str] = []
+    out = _run_qe_out(run_path)
+    if out:
+        text = out.read_text(errors="ignore").splitlines()
+        for i, ln in enumerate(text):
+            if "Error in routine" in ln:  # QE: "Error in routine X (n):" + message lines, closed by %%%%
+                for nxt in text[i:i + 6]:
+                    if nxt.strip().startswith("%%%%"):
+                        break
+                    if nxt.strip():
+                        lines.append(nxt.strip())
+                break
+        if not lines:
+            lines = [ln.strip() for ln in text if "convergence NOT achieved" in ln][:1]
+    if not lines and crystal.get("job_script"):
+        slurm_out = (run_path / crystal["job_script"]).with_suffix(".slurm.out")
+        if slurm_out.is_file():
+            keys = ("error", "segmentation fault", "killed", "cancelled", "time limit", "denied")
+            lines = [ln.strip() for ln in slurm_out.read_text(errors="ignore").splitlines()
+                     if any(k in ln.lower() for k in keys)
+                     and "bind memory" not in ln.lower()]  # Open MPI binding warning: harmless, on every job
+    return "\n".join(lines[:max_lines]) or None
+
+
+class _DownloadTrigger(ipv.VuetifyTemplate):
+    """Invisible helper: bumping `nonce` makes the browser download `url` as `filename`."""
+
+    url = traitlets.Unicode("").tag(sync=True)
+    filename = traitlets.Unicode("logs.zip").tag(sync=True)
+    nonce = traitlets.Int(0).tag(sync=True)
+    template = traitlets.Unicode("""
+<template><span></span></template>
+<script>
+module.exports = {
+  watch: {
+    nonce() {
+      const a = document.createElement('a');
+      a.href = new URL(this.url, document.baseURI).href;
+      a.download = this.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    },
+  },
+};
+</script>
+""").tag(sync=True)
+
+
+def _logs_download_cell(rows: list[dict]) -> widgets.VBox:
+    """Download icon (same look as the row's other icons): zips the run log(s) and
+    QE output(s) on click and hands the zip to the browser."""
+    first = rows[0]
+    rid = first.get("run_label") or first.get("run_id") or "run"
+    trigger = _DownloadTrigger(filename=f"logs_{rid}.zip")
+    tip = "Download QE output and workflow log"
+    btn = widgets.Button(icon="download", tooltip=tip, layout=widgets.Layout(width="100%"))
+
+    def on_click(_b=None) -> None:
+        btn.disabled, btn.icon = True, "spinner"
+
+        def work() -> None:
+            try:
+                path = _run_logs_zip(rows)
+                if path is None:
+                    btn.tooltip = "No log or QE output found for this run"
+                else:
+                    btn.tooltip = tip
+                    trigger.url = f"voila/files/downloads/{path.name}"
+                    trigger.nonce += 1
+            except Exception as e:
+                btn.tooltip = f"Could not prepare the download: {e}"
+            finally:
+                btn.disabled, btn.icon = False, "download"
+
+        threading.Thread(target=work, daemon=True).start()
+
+    btn.on_click(on_click)
+    return widgets.VBox([btn, trigger], layout=widgets.Layout(width="100%"))
+
+
 def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:
     """One table row: a single run, or one multi-CIF batch (rows sharing an array job)."""
     first = rows[0]
@@ -96,7 +234,7 @@ def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:
     cif_dir = first.get("cif_dir")
 
     open_btn = widgets.Button(
-        icon="wrench", tooltip="Monitor & Resume this run" if not batch else "Monitor & Resume all runs in this batch",
+        icon="wrench", tooltip="Monitor this run" if not batch else "Monitor all runs in this batch",
         layout=widgets.Layout(width="100%"),
     )
     open_btn.on_click(lambda _b, row=group_row: on_open(row))
@@ -121,16 +259,17 @@ def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:
     )
     path_html.add_class("advqm-rowcell-wrap")
     calc_html = widgets.HTML(html.escape(_fmt(first.get("calc_type"))), layout=widgets.Layout(width="100%"))
-    calc_html.add_class("advqm-rowcell-center")
     cells = [
         widgets.HTML(html.escape(_fmt(job_id)), layout=widgets.Layout(width="100%")),
         widgets.HTML(html.escape(_fmt(run_id_text)), layout=widgets.Layout(width="100%")),
+        widgets.HTML(html.escape(first.get("submitted_by") or "–"), layout=widgets.Layout(width="100%")),
         cif_html,
         path_html,
         calc_html,
         status_html,
         open_btn,
         load_results_btn,
+        _logs_download_cell(rows),
     ]
     row_box = widgets.HBox(cells, layout=widgets.Layout(
         width="100%", min_width=_TABLE_MIN_WIDTH,
@@ -151,22 +290,28 @@ def _build_runs_page(nav: _Nav):
     new_run_btn.on_click(lambda _: nav.show("new_run"))
 
     search_w = ipv.TextField(
-        label="Search Runs", v_model="", placeholder="Search by CIF name or job ID...",
-        outlined=True, dense=True, layout=widgets.Layout(width="60%"),
+        label="Search by CIF Name or Job ID", v_model="", outlined=True, dense=True,
     )
     refresh_btn = widgets.Button(description="Refresh", icon="refresh")
 
     # ── Filter by user / jump straight to a run's results ───────────────────
-    user_filter_w = widgets.Dropdown(layout=widgets.Layout(width="calc(40% - 8px)"))
+    # Same field style as the search box above (caption + outlined input).
+    _ALL_USERS = "__all__"
+    user_filter_w = ipv.Select(
+        label="Filter by User / Jump to Results", items=[], v_model=_ALL_USERS,
+        outlined=True, dense=True,
+    )
 
     col_head = widgets.HTML(table_head_html(
         _ROW_COL_LABELS, _ROW_COL_WIDTHS, _TABLE_MIN_WIDTH,
-        info={"Calculation Type": _CALC_TYPE_INFO},
+        info={"Calculation\nType": _CALC_TYPE_INFO},
     ))
-    rows_box = widgets.VBox([])
+    # As wide as the rows, so the card (header + rows) is what scrolls sideways.
+    rows_box = widgets.VBox([], layout=widgets.Layout(min_width=_TABLE_MIN_WIDTH))
     rows_wrap = widgets.VBox([col_head, rows_box])
     rows_wrap.add_class("advqm-card")
     rows_wrap.add_class("advqm-rowlist")
+    rows_wrap.add_class("advqm-runs-table")  # headers and values centred
 
     current_rows = []
 
@@ -175,8 +320,7 @@ def _build_runs_page(nav: _Nav):
     # just reflects whatever's currently selected. ──────────────────────────
     selected_run = {"path": None, "paths": [], "label": None}
     selected_label_w = widgets.HTML('<span class="advqm-muted">No run selected — click the ⚙ icon on a run above.</span>')
-    job_status = widgets.Label(value="—")
-    query_btn = widgets.Button(description="Query SLURM", icon="search")
+    job_status = widgets.Label(value="")
     resume_btn = widgets.Button(description="Resume", button_style="success", icon="play")
     resume_target_w = widgets.Dropdown(
         options=[
@@ -221,7 +365,7 @@ def _build_runs_page(nav: _Nav):
         "failed/cancelled/timed-out runs and submits them again. With \"Selected CIF file\", tick the CIF "
         "files of the selected job to resume.</span>"
     )
-    state_out = widgets.Output()
+    state_out = widgets.HTML()
 
     def _cif_name_of(cif) -> str:
         return Path(cif or "?").name
@@ -270,78 +414,77 @@ def _build_runs_page(nav: _Nav):
         show_state()
 
     def show_state(_=None):
-        state_out.clear_output()
         paths = selected_run["paths"] or ([selected_run["path"]] if selected_run["path"] else [])
-        with state_out:
-            for rp in paths:
-                _show_one_state(rp, header=len(paths) > 1)
+        # Plain HTML value (not an Output widget), so the auto status check can
+        # redraw it safely from its background thread.
+        state_out.value = "".join(_one_state_html(rp, header=len(paths) > 1) for rp in paths)
 
-    def _show_one_state(rp, header=False):
-        if True:
-            st = load_run_state(rp)
-            if st is None:
-                print(f"No state.json found for {rp}")
-                return
-            crystal = st.get("tasks", {}).get("crystal", {})
-            qe_output = crystal.get("qe_output") or {}
-            qe_results = crystal.get("qe_results") or {}
-            error_markers = qe_output.get("qe_error_markers") or []
-            try:
-                setup_error = _last_run_error(rp)
-            except Exception:
-                setup_error = None
-            rows = [
-                ("CIF", _fmt(Path(st.get("cif") or "?").name if st.get("cif") else None)),
-                ("Calculation Type", _fmt_calc_type(st.get("calc_type"))),
-                ("Status", _fmt(crystal.get("status"))),
-                ("Job ID", _fmt(crystal.get("job_id"))),
-                ("SLURM State", _fmt(crystal.get("slurm_state"))),
-                ("Setup Error", setup_error or "None"),
-                ("k-points", _fmt(crystal.get("kpoints"))),
-                ("Pseudopotential Dir", _fmt(crystal.get("pseudo_dir"))),
-                ("DFT Functional", _fmt((crystal.get("system_params") or {}).get("input_dft"))),
-                ("vdW Correction", _fmt((crystal.get("system_params") or {}).get("vdw_corr"))),
-                ("GPU", _fmt(
-                    f'{crystal["gpu"]["count"]} x {crystal["gpu"]["type"]}'
-                    if crystal.get("gpu") else "No"
-                )),
-                ("Submitted At", _fmt(crystal.get("submitted_at"))),
-                ("User Name", _fmt(st.get("submitted_by"))),
-                ("Energy (kJ/mol)", _fmt_energy(qe_results.get("energy_ry"))),
-                ("JOB DONE seen", _fmt(qe_output.get("qe_job_done"))),
-                ("Error markers found", _fmt(", ".join(error_markers)) if error_markers else "None"),
-            ]
-            lines = "".join(
-                f'<div style="padding:4px 0; border-bottom:1px solid #f1f3f7;">'
-                f'<span style="color:#667085; font-weight:600;">{label}:</span> '
-                f'<span style="color:#1f2937;">{value}</span></div>'
-                for label, value in rows
-            )
-            title = (
-                f'<div style="font-weight:700; margin:10px 0 4px;">{html.escape(_fmt(Path((load_run_state(rp) or {}).get("cif") or "?").name))}'
-                f' · {html.escape(rp.name)}</div>'
-                if header else ""
-            )
-            display(HTML(f'<div style="font-size:0.85rem;">{title}{lines}</div>'))
+    def _one_state_html(rp, header=False) -> str:
+        st = load_run_state(rp)
+        if st is None:
+            return f'<div class="advqm-muted">No state.json found for {html.escape(str(rp))}</div>'
+        crystal = st.get("tasks", {}).get("crystal", {})
+        qe_output = crystal.get("qe_output") or {}
+        qe_results = crystal.get("qe_results") or {}
+        try:
+            setup_error = _last_run_error(rp)
+        except Exception:
+            setup_error = None
+        rows = [
+            ("CIF", _fmt(Path(st.get("cif") or "?").name if st.get("cif") else None)),
+            ("Calculation Type", _fmt_calc_type(st.get("calc_type"))),
+            ("Status", _fmt(crystal.get("status"))),
+            ("Job ID", _fmt(crystal.get("job_id"))),
+            ("SLURM State", _fmt(crystal.get("slurm_state"))),
+            ("Setup Error", setup_error or "None"),
+            ("k-points", _fmt(crystal.get("kpoints"))),
+            ("Pseudopotential Dir", _fmt(crystal.get("pseudo_dir"))),
+            ("DFT Functional", _fmt((crystal.get("system_params") or {}).get("input_dft"))),
+            ("vdW Correction", _fmt((crystal.get("system_params") or {}).get("vdw_corr"))),
+            ("GPU", _fmt(
+                f'{crystal["gpu"]["count"]} x {crystal["gpu"]["type"]}'
+                if crystal.get("gpu") else "No"
+            )),
+            ("Submitted At", _fmt(crystal.get("submitted_at"))),
+            ("User Name", _fmt(st.get("submitted_by"))),
+            ("Energy (kJ/mol)", _fmt_energy(qe_results.get("energy_ry"))),
+            ("Error found", (_run_error_text(rp, crystal) if status_category(crystal.get("status")) == "danger" else None) or "None"),
+        ]
+        lines = "".join(
+            f'<div style="padding:4px 0; border-bottom:1px solid #f1f3f7;">'
+            f'<span style="color:#667085; font-weight:600;">{label}:</span> '
+            f'<span style="color:#1f2937;">{html.escape(str(value)).replace(chr(10), "<br>")}</span></div>'
+            for label, value in rows
+        )
+        title = (
+            f'<div style="font-weight:700; margin:10px 0 4px;">'
+            f'{html.escape(_fmt(Path(st.get("cif") or "?").name))} · {html.escape(rp.name)}</div>'
+            if header else ""
+        )
+        return f'<div style="font-size:0.85rem;">{title}{lines}</div>'
 
-
-    def on_query(_=None):
-        paths = selected_run["paths"] or ([selected_run["path"]] if selected_run["path"] else [])
-        if not paths:
-            job_status.value = "No run selected — click the ⚙ icon on a run above."
+    def _auto_check(paths: list[Path]) -> None:
+        """Opening a run (⚙) checks SLURM for its unfinished runs and saves the
+        result, like Refresh does but for just these runs (never submits)."""
+        unfinished = [
+            rp for rp in paths
+            if status_category(((load_run_state(rp) or {}).get("tasks", {})
+                                .get("crystal", {})).get("status")) in ("info", "warning")
+        ]
+        if not unfinished:
             return
-        msgs = []
-        for rp in paths:
-            st = load_run_state(rp) or {}
-            jid = st.get("tasks", {}).get("crystal", {}).get("job_id")
-            if not jid:
-                msgs.append(f"{rp.name}: no SLURM job_id recorded")
-                continue
+        job_status.value = "Checking SLURM status…"
+
+        def work() -> None:
             try:
-                msgs.append(f"Job {jid}: {_query_slurm_job(str(jid))}")
-            except Exception as e:
-                msgs.append(f"Job {jid}: query failed ({e})")
-        job_status.value = " | ".join(msgs)
+                for rp in unfinished:
+                    _resolve_one_stale({"run_path": str(rp), "run_id": rp.name}, _base_for(rp))
+            finally:
+                job_status.value = ""
+                show_state()
+                refresh()
+
+        threading.Thread(target=work, daemon=True).start()
 
     def _scan_dirs() -> list[Path]:
         """Folders the table reads: the default runs folder plus every folder a
@@ -449,15 +592,12 @@ def _build_runs_page(nav: _Nav):
 
         threading.Thread(target=work, daemon=True).start()
 
-    query_btn.on_click(on_query)
     resume_btn.on_click(on_resume)
 
-    monitor_body = widgets.VBox(
-        [selected_label_w, widgets.HBox([job_status, query_btn, resume_btn]),
-         resume_target_w, cif_picker, force_pp_resume_w, resubmit_failed_w, resume_note_w, state_out]
-    )
+    # Monitor only: run details + automatic SLURM status check (no Resume controls).
+    monitor_body = widgets.VBox([selected_label_w, job_status, state_out])
     monitor_acc = widgets.Accordion(children=[monitor_body])
-    monitor_acc.set_title(0, "Monitor & Resume a run")
+    monitor_acc.set_title(0, "Monitor")
     monitor_acc.selected_index = None
 
     selected_run_path_str = {"value": None}
@@ -475,20 +615,25 @@ def _build_runs_page(nav: _Nav):
         monitor_acc.selected_index = 0
         selected_run_path_str["value"] = row.get("run_path")
         render_rows()
+        _auto_check(paths)
 
     def on_load_results(row: dict) -> None:
         nav.show("results", row=row)
 
     def _refresh_user_filter():
         users = sorted({r["submitted_by"] for r in current_rows if r.get("submitted_by")})
-        options = [("All users", None)] + [(u, u) for u in users] + [("Unknown", "__unknown__")]
-        prev = user_filter_w.value
-        user_filter_w.options = options
-        user_filter_w.value = prev if prev in [o[1] for o in options] else None
+        items = (
+            [{"text": "All users", "value": _ALL_USERS}]
+            + [{"text": u, "value": u} for u in users]
+            + [{"text": "Unknown", "value": "__unknown__"}]
+        )
+        prev = user_filter_w.v_model
+        user_filter_w.items = items
+        user_filter_w.v_model = prev if prev in [i["value"] for i in items] else _ALL_USERS
 
     def _filtered_by_user(rows: list[dict]) -> list[dict]:
-        selected = user_filter_w.value
-        if selected is None:
+        selected = user_filter_w.v_model
+        if selected in (None, _ALL_USERS):
             return rows
         if selected == "__unknown__":
             return [r for r in rows if not r.get("submitted_by")]
@@ -606,30 +751,19 @@ def _build_runs_page(nav: _Nav):
 
     refresh_btn.on_click(refresh_and_resolve_stale)
     search_w.observe(render_rows, names="v_model")
-    user_filter_w.observe(render_rows, names="value")
+    user_filter_w.observe(render_rows, names="v_model")
 
     refresh()
-
-    filter_card = widgets.VBox(
-        [
-            widgets.HTML('<div class="advqm-card-title">Filter by user / jump to results</div>'),
-            widgets.HBox(
-                [user_filter_w],
-                layout=widgets.Layout(width="100%", justify_content="space-between"),
-            ),
-        ]
-    )
-    filter_card.add_class("advqm-card")
 
     return widgets.VBox(
         [
             header,
             widgets.HBox(
-                [new_run_btn], layout=widgets.Layout(padding="0 0 12px 0")
+                [new_run_btn, refresh_btn],
+                layout=widgets.Layout(padding="0 0 12px 0", grid_gap="10px"),
             ),
-            widgets.HBox([refresh_btn]),
             labeled_field(search_w),
-            filter_card,
+            labeled_field(user_filter_w),
             rows_wrap,
         ]
     )

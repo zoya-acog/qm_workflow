@@ -10,10 +10,10 @@ RUN apt-get update \
 
 WORKDIR /srv
 
-COPY advQMcalc_test/ /srv/advQMcalc_test/
-COPY app/ /srv/app/
-COPY extra/slurm.conf /srv/app/slurm.conf
-
+# Third-party packages are installed BEFORE the project code is copied in, so
+# Docker's layer cache keeps this slow step (~470 MB) across code-only edits;
+# it re-runs only when this package list changes.
+#
 # Matching the working stack from the reference app (/home/zoya/AutoMD-OXtalS,
 # deploy/Dockerfile.voila): ipyvuetify's widget components need the older
 # notebook-6 / ipywidgets-7 classic-nbextension stack, not the newer voila 0.5 /
@@ -22,7 +22,6 @@ COPY extra/slurm.conf /srv/app/slurm.conf
 # workarounds that were specific to bugs in that newer stack — this older
 # combination doesn't hit them in the first place.
 RUN pip install --no-cache-dir \
-        /srv/advQMcalc_test \
         "voila>=0.4,<0.5" \
         "notebook==6.5.4" \
         "ipywidgets==7.6.5" \
@@ -42,8 +41,20 @@ RUN pip install --no-cache-dir \
 
 RUN pip install --no-cache-dir cif2cell
 
+# Project code last: editing it only re-runs these quick steps.
+# advQMcalc_test has no dependencies, so --no-deps skips pip's resolver.
+COPY advQMcalc_test/ /srv/advQMcalc_test/
+RUN pip install --no-cache-dir --no-deps /srv/advQMcalc_test
+COPY app/ /srv/app/
+COPY extra/slurm.conf /srv/app/slurm.conf
+
 RUN chmod -R 777 /srv
 
 ENV SLURM_CONF=/srv/app/slurm.conf
 
-CMD ["voila", "--port=8866", "--Voila.ip=0.0.0.0", "--no-browser", "--autoreload=False", "--VoilaConfiguration.enable_nbextensions=True", "app/app.ipynb"]
+# websocket_ping_interval: ping the browser every 20 s so the reverse proxy does not
+# drop an idle tab's connection (the UI then stops responding until a refresh).
+# file_whitelist: Voila's default (images) plus the QE output zips the Results
+# page writes to app/downloads/ (pages/results.py _qe_output_zip), and the Runs page's
+# log zips (pages/runs.py _run_logs_zip).
+CMD ["voila", "--port=8866", "--Voila.ip=0.0.0.0", "--no-browser", "--autoreload=False", "--VoilaConfiguration.enable_nbextensions=True", "--Voila.tornado_settings={'websocket_ping_interval': 20}", "--VoilaConfiguration.file_whitelist=['.*\\\\.(png|jpg|gif|svg)', 'downloads/qe_output_files_[0-9a-f]{32}\\\\.zip', 'downloads/run_logs_[0-9a-f]{32}\\\\.zip']", "app/app.ipynb"]

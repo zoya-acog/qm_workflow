@@ -147,11 +147,12 @@ def trajectory_xsf(out_path) -> bytes | None:
     return data
 
 
-def energy_plot_html(energies: list[float], label: str) -> str:
-    """Card with a Total Energy vs Optimisation Step plot (PNG embedded as base64).
+def energy_plot_html(energies: list[float], label: str | None = None) -> str:
+    """Total Energy vs Optimisation Step plot (PNG embedded as base64).
 
-    Style follows the plot cards in AutoMD-OXtalS: the name sits above the
-    figure and the figure itself carries no title.
+    With a label: a card in the AutoMD-OXtalS style (name above the figure, no
+    title on the figure). Without one: just the image, for a container that
+    already shows a title (the Results plot dialog).
     """
     try:
         import matplotlib
@@ -178,12 +179,24 @@ def energy_plot_html(energies: list[float], label: str) -> str:
     fig.savefig(buf, format="png", facecolor="white")
     plt.close(fig)
     img = base64.b64encode(buf.getvalue()).decode("ascii")
+    if label is None:
+        return f'<img src="data:image/png;base64,{img}" style="width:100%; display:block; background:#fff;"/>'
     return (
         '<div style="border:1px solid #e5e7eb; border-radius:10px; background:#fff; overflow:hidden;">'
         f'<div style="padding:10px 12px 4px; font-size:0.86rem; font-weight:700; color:#12344d;">'
         f'{html.escape(label)}</div>'
         f'<img src="data:image/png;base64,{img}" style="width:100%; max-width:760px; display:block; background:#fff;"/>'
         "</div>"
+    )
+
+
+def loading_html(text: str = "Loading…", page: bool = False) -> str:
+    """Spinner with a short message, shown while a page or table is being built.
+    page=True centres it in the content area (used while switching pages)."""
+    cls = "advqm-loading advqm-loading-page" if page else "advqm-loading"
+    return (
+        f'<div class="{cls}"><div class="advqm-spinner"></div>'
+        f"<span>{html.escape(text)}</span></div>"
     )
 
 
@@ -199,14 +212,13 @@ def table_head_html(labels: list[str], widths: list[str], min_width: str | None 
     def _cell(label: str) -> str:
         icon = info.get(label)
         if not icon:
-            return f"<span>{html.escape(label)}</span>"
-        # Label may truncate with an ellipsis, but the info icon must never be
-        # clipped, so it sits outside the truncating span and cannot shrink.
+            return f"<span>{html.escape(label).replace(chr(10), '<br>')}</span>"
+        # The info icon follows the label's last word inline (e.g. after "Type"
+        # on a two-line "Calculation / Type" header) and is never clipped.
         return (
-            '<span style="display:flex; align-items:center; overflow:visible; margin-left:-10px;">'
-            f'<span style="min-width:0; overflow:hidden; text-overflow:ellipsis; '
-            f'white-space:nowrap;">{html.escape(label)}</span>'
-            f'<span style="flex:0 0 auto; overflow:visible; padding:0 0 0 4px;">{icon.strip()}</span>'
+            '<span style="overflow:visible; line-height:1.25; white-space:normal;">'
+            f'{html.escape(label).replace(chr(10), "<br>")}'
+            f'<span style="white-space:nowrap;">&nbsp;{icon.strip()}</span>'
             "</span>"
         )
 
@@ -290,24 +302,31 @@ def group_cif_names(rows: list[dict]) -> list[str]:
     ]
 
 
-def labeled_field(w, style: str = ""):
+def labeled_field(w, style: str = "", info: str | None = None):
     """Show an ipyvuetify field's name as a plain label ABOVE the input box.
 
     Moves the widget's floating label out of the input (label becomes empty) and
     puts the same text in a small bold caption above it, matching the field
     labels in AutoMD-OXtalS (0.86rem / 600 / #374151). Widget and logic are
     otherwise untouched; fields without a label are returned as-is.
+    info: optional hover text shown on an ⓘ icon next to the caption.
     """
     text = getattr(w, "label", "") or ""
     if not text:
         return w
     w.label = ""
+    caption_children = [ipv.Html(
+        tag="span", children=[text],
+        style_="font-size:0.86rem; font-weight:600; color:#374151;",
+    )]
+    if info:
+        caption_children.append(ipv.Html(
+            tag="span", children=["ⓘ"], attributes={"title": info},
+            style_="cursor:help; color:#1565c0; font-weight:700; margin-left:5px;",
+        ))
     caption = ipv.Html(
         tag="div",
-        children=[ipv.Html(
-            tag="span", children=[text],
-            style_="font-size:0.86rem; font-weight:600; color:#374151;",
-        )],
+        children=caption_children,
         style_="display:flex; align-items:center; margin:8px 0 2px 0;",
     )
     return ipv.Html(tag="div", children=[caption, w], style_=style)
@@ -389,6 +408,7 @@ def _list_all_run_rows(base: Path, only_successful: bool = False) -> list[dict]:
             "batch_id": state.get("batch_id"),
             "array_task_id": crystal.get("array_task_id"),
             "run_label": state.get("run_label"),
+            "submitted_by": state.get("submitted_by"),
             "cif_dir": state.get("cif_dir"),
             "kpoints": crystal.get("kpoints"),
             "pseudo_dir": crystal.get("pseudo_dir"),

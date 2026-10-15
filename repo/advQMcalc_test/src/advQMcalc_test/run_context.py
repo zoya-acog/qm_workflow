@@ -147,7 +147,6 @@ class RunContext:
                 f"docker run --rm {device_arg}\\",
                 '    --label user="$(id -un)" \\',
                 f'    --label description="advQMcalc_test QE {kind} job ($SLURM_JOB_NAME)" \\',
-                "    --label security=ldap \\",
                 '    --user "$(id -u):$(id -g)" -e HOME=/tmp -e OMP_NUM_THREADS \\',
                 f'    -v {DATA_ROOT}:{DATA_ROOT} -v "$localscratch:$localscratch" \\',
                 '    -w "$workdir" "$IMG" \\',

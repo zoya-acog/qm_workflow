@@ -544,6 +544,9 @@ def _inject_system_parameters(text, params):
     return out
 
 
+QE_DEFAULT_NSTEP = 100
+
+
 def _ensure_qe_required_sections(text, pseudo_dir_str, calc_type, kpoints, system_params):
     new_text = text
     calculation_line = f"  calculation = '{calc_type}'"
@@ -567,6 +570,21 @@ def _ensure_qe_required_sections(text, pseudo_dir_str, calc_type, kpoints, syste
         new_text = (
             "&CONTROL\n" + calculation_line + "\n" + pseudo_dir_line + "\n/\n" + new_text
         )
+
+    # Max ionic steps for optimizations (QE default 50); scf ignores it, so only set for relax.
+    if calc_type in ("relax", "vc-relax"):
+        nstep_line = f"  nstep = {QE_DEFAULT_NSTEP}"
+        nstep_pattern = re.compile(r"^\s*nstep\s*=.*$", flags=re.MULTILINE | re.IGNORECASE)
+        if nstep_pattern.search(new_text):
+            new_text = nstep_pattern.sub(nstep_line, new_text, count=1)
+        else:
+            new_text = re.sub(
+                r"^(\s*&CONTROL\s*\n)",
+                lambda m: m.group(1) + nstep_line + "\n",
+                new_text,
+                count=1,
+                flags=re.MULTILINE | re.IGNORECASE,
+            )
 
     electrons_pattern = re.compile(r"^\s*&ELECTRONS\b", flags=re.MULTILINE | re.IGNORECASE)
     if not electrons_pattern.search(new_text):
@@ -672,7 +690,22 @@ def _cleanup_qe_input(qe_path, pseudo_dir, pp_map, calc_type, kpoints, system_pa
 # ============================================================
 # SLURM SUBMISSION / MONITORING
 # ============================================================
+_LEGACY_SECURITY_LABEL = re.compile(r"^[ \t]*--label security=\S+ \\\n", flags=re.MULTILINE)
+
+
+def _drop_legacy_security_label(script_path):
+    """Remove the old `--label security=...` line from a job script written
+    before 2026-10-12. The new reverse-proxy Docker policy refuses any container
+    that carries a security label, so resubmitting such a script would fail."""
+    path = Path(script_path)
+    text = path.read_text()
+    cleaned = _LEGACY_SECURITY_LABEL.sub("", text)
+    if cleaned != text:
+        _atomic_write_text(path, cleaned)
+
+
 def _submit_slurm_script(script_path):
+    _drop_legacy_security_label(script_path)
     result = subprocess.run(
         ["sbatch", script_path.name],
         cwd=script_path.parent,
@@ -744,6 +777,7 @@ def _submit_array_batch(run_dirs, base_runs_dir, max_concurrent=0):
             continue
         script = (Path(run_dir) / script_rel).resolve()
         if script.exists():
+            _drop_legacy_security_label(script)  # array tasks run this script as-is
             entries.append((run_ctx, script))
     if not entries:
         raise RuntimeError("No prepared runs to submit as an array")
@@ -845,6 +879,36 @@ def _query_slurm_job(job_id):
             return p
 
     return states[0]
+
+
+# squeue states that mean "still in progress", folded into the two states the
+# workflow tracks.
+_SQUEUE_STATE_MAP = {"CONFIGURING": "PENDING", "COMPLETING": "RUNNING", "SUSPENDED": "RUNNING"}
+
+
+def _job_state_with_fallback(job_id, logger):
+    """
+    Job state from SLURM accounting (sacct), falling back to the live queue
+    (squeue) when the accounting database is unreachable. A job that is no
+    longer queued while sacct is down returns "ENDED": it has finished, but
+    SLURM can no longer say how, so output validation decides (JOB DONE etc.).
+    Raises only if neither sacct nor squeue can be asked.
+    """
+    try:
+        return _query_slurm_job(job_id)
+    except Exception as e:
+        first = next((ln for ln in str(e).splitlines() if "error" in ln.lower()), str(e).splitlines()[0])
+        logger.warning(f"SLURM accounting (sacct) unavailable for job {job_id}; using squeue instead ({first.strip()})")
+    result = subprocess.run(
+        ["squeue", "-j", str(job_id), "-h", "-o", "%T"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    queued = result.stdout.split()
+    if result.returncode == 0 and queued:
+        return _SQUEUE_STATE_MAP.get(queued[0], queued[0])
+    if (result.returncode == 0 and not queued) or "invalid job id" in result.stderr.lower():
+        return "ENDED"
+    raise RuntimeError(f"Neither sacct nor squeue could report job {job_id}: {result.stderr.strip()}")
 
 
 # ============================================================
@@ -1257,10 +1321,12 @@ def _process_single_cif(cif_path, runs_dir, args):
         logger.info("No submitted crystal job found; skipping monitoring")
     else:
         try:
-            slurm_state = _query_slurm_job(job_id)
+            slurm_state = _job_state_with_fallback(job_id, logger)
         except Exception as e:
-            logger.error(f"Failed to query job status: {e}")
-            return
+            # The job IS submitted; only the status check failed. Keep the saved
+            # state and carry on (callers must not report this run as failed).
+            logger.warning(f"Could not query status of job {job_id}; will retry on the next refresh: {e}")
+            slurm_state = crystal_task.get("slurm_state")
         state["tasks"]["crystal"]["slurm_state"] = slurm_state
         if slurm_state == "PENDING":
             state["tasks"]["crystal"]["status"] = "pending"
@@ -1277,7 +1343,7 @@ def _process_single_cif(cif_path, runs_dir, args):
     state = run_ctx.load_state()
     crystal_task = state.get("tasks", {}).get("crystal", {})
     slurm_state = crystal_task.get("slurm_state")
-    if slurm_state not in ("COMPLETED", "FAILED", "CANCELLED", "TIMEOUT"):
+    if slurm_state not in ("COMPLETED", "ENDED", "FAILED", "CANCELLED", "TIMEOUT"):
         logger.info("Crystal job not in terminal state yet; skipping output validation")
     else:
         try:
@@ -1300,7 +1366,7 @@ def _process_single_cif(cif_path, runs_dir, args):
         }
 
         if (
-            slurm_state == "COMPLETED"
+            slurm_state in ("COMPLETED", "ENDED")
             and out_info["qe_job_done"]
             and not out_info["qe_has_error"]
         ):

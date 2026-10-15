@@ -35,7 +35,7 @@ from pages.dashboard import _build_dashboard_page
 from pages.new_run import _build_new_run_page
 from pages.results import _build_results_page
 from pages.runs import _build_runs_page
-from shared import _Nav, _nav_button
+from shared import _Nav, _nav_button, loading_html
 
 
 def app(app_mode: bool = True, debug: bool = False):
@@ -80,7 +80,14 @@ def app(app_mode: bool = True, debug: bool = False):
                 b.add_class("advqm-navbtn-active")
             else:
                 b.remove_class("advqm-navbtn-active")
-        main_area.children = [pages[key]]
+        if key in ("runs", "results", "dashboard"):
+            # These pages are rebuilt below (slow for big batches); show a spinner
+            # meanwhile instead of the stale previous copy of the page.
+            spinner = widgets.HTML(loading_html("Loading…", page=True))
+            spinner.add_class("advqm-fill")
+            main_area.children = [spinner]
+        else:
+            main_area.children = [pages[key]]
         if key == "runs":
             pages["runs"] = _build_runs_page(nav)
             main_area.children = [pages["runs"]]

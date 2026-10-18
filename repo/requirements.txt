@@ -1,0 +1,19 @@
+# Web app + backend dependencies for running without Docker (make install).
+# Versions match the Docker image (Dockerfile): ipyvuetify needs the classic
+# notebook-6 / ipywidgets-7 stack, not voila 0.5 / ipywidgets 8.
+voila>=0.4,<0.5
+notebook==6.5.4
+ipywidgets==7.6.5
+widgetsnbextension==3.5.2
+jupyterlab_widgets==1.1.4
+ipyvuetify==1.8.10
+ipyvue>=1.9,<2
+ipykernel
+pandas
+matplotlib>=3.9,<4
+cif2cell
+pymatgen>=2024.1
+-e ./advQMcalc_test
+
+# Tests
+pytest

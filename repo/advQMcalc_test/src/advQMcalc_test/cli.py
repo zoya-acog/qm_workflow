@@ -442,16 +442,18 @@ def _validate_vdw_options(args):
 
 def _validate_gpu_options(args):
     """Return an error message if the GPU options are invalid, else None."""
-    from .run_context import GPU_IMAGE_TAR
+    from .run_context import CPU_IMAGE_TAR, GPU_IMAGE_TAR
+    from .site_config import SITE
 
+    if args.gpu and args.gpus < 1:
+        return "--gpus must be >= 1"
+    # Image archives exist only on Docker sites; module sites use the cluster's QE.
+    if SITE["launch_mode"] != "docker":
+        return None
     if not args.gpu:
-        from .run_context import CPU_IMAGE_TAR
-
         if not Path(CPU_IMAGE_TAR).exists():
             return f"CPU QE image archive is missing: {CPU_IMAGE_TAR}"
         return None
-    if args.gpus < 1:
-        return "--gpus must be >= 1"
     if not Path(GPU_IMAGE_TAR).exists():
         return f"GPU run requested but the GPU QE image archive is missing: {GPU_IMAGE_TAR}"
     return None
@@ -803,10 +805,11 @@ def _submit_array_batch(run_dirs, base_runs_dir, max_concurrent=0):
     ]
     # Scripts written before a node was excluded keep their old --exclude line;
     # the array header decides placement, so always use the current exclude list.
-    from .run_context import GPU_EXCLUDE_NODES
+    from .site_config import SITE
 
+    exclude = SITE["gpu" if any(l.startswith("#SBATCH --gres=") for l in header) else "cpu"]["exclude"]
     header = [
-        f"#SBATCH --exclude={GPU_EXCLUDE_NODES}" if line.startswith("#SBATCH --exclude=") else line
+        f"#SBATCH --exclude={exclude}" if line.startswith("#SBATCH --exclude=") else line
         for line in header
     ]
     throttle = f"%{int(max_concurrent)}" if int(max_concurrent or 0) > 0 else ""
@@ -1489,7 +1492,7 @@ def main():
         default=0,
         help="Max array tasks running at once (0 = no limit)",
     )
-    parser.add_argument("--gpu", action="store_true", help="Run QE on GPU (pgpu partition)")
+    parser.add_argument("--gpu", action="store_true", help="Run QE on GPU (partition from the site config)")
     parser.add_argument(
         "--gpu-type", default=None, help="GPU gres type, e.g. nvidia_geforce_rtx_4090"
     )

@@ -41,6 +41,9 @@ RUN pip install --no-cache-dir \
 
 RUN pip install --no-cache-dir cif2cell
 
+# Results page: finds the molecule in each CIF to get Z (pages/results.py _cif_molecule).
+RUN pip install --no-cache-dir "pymatgen>=2024.1"
+
 # Project code last: editing it only re-runs these quick steps.
 # advQMcalc_test has no dependencies, so --no-deps skips pip's resolver.
 COPY advQMcalc_test/ /srv/advQMcalc_test/

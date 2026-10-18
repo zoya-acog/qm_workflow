@@ -8,16 +8,15 @@ from shutil import copy2
 from textwrap import dedent
 
 
-CPU_IMAGE = "advqm-qe-cpu:7.2"
-CPU_IMAGE_TAR = "/mnt/own6d/qe_workflow/data/gpu-build/advqm-qe-cpu-7.2.tar"
-GPU_IMAGE = "advqm-qe-gpu:7.3.1"
-GPU_IMAGE_TAR = "/mnt/own6d/qe_workflow/data/gpu-build/advqm-qe-gpu-7.3.1.tar"
-DATA_ROOT = "/mnt/own6d/qe_workflow/data"
-# GPU nodes jobs must avoid. own3: GTX 1080 Ti has no kernels in the GPU image.
-# own10: our user is not in the docker group there. own5: Docker cannot find the
-# NVIDIA CDI device spec ('could not select device driver "cdi"'); remove it from
-# this list once an admin has fixed the node.
-GPU_EXCLUDE_NODES = "own3,own5,own10"
+from .site_config import SITE
+
+# Kept as module constants for older importers (cli.py); values come from the site config.
+CPU_IMAGE = SITE["cpu"]["image"]
+CPU_IMAGE_TAR = SITE["cpu"]["image_tar"]
+GPU_IMAGE = SITE["gpu"]["image"]
+GPU_IMAGE_TAR = SITE["gpu"]["image_tar"]
+DATA_ROOT = SITE["data_root"]
+GPU_EXCLUDE_NODES = SITE["gpu"]["exclude"]
 
 
 
@@ -107,79 +106,117 @@ class RunContext:
         input_dir = qe_input_path.parent.resolve()
 
         pad = " " * 12  # keeps multi-line inserts aligned for dedent()
-        # QE always runs from a docker image (DevOps policy: containers only).
-        # Paths are mounted at identical locations so the generated QE input
-        # (pseudo_dir, outdir) works unchanged, and MPI runs inside the
-        # container as one job (plain `srun pw.x` gave uncoordinated copies).
+        site = SITE
+        kind = "GPU" if gpu else "CPU"
+        res = site["gpu"] if gpu else site["cpu"]
+        docker = site["launch_mode"] == "docker"
+        if docker and site["launcher"] != "mpirun":
+            raise ValueError("site config: launch_mode 'docker' needs launcher 'mpirun'")
+
+        # #SBATCH resource lines; empty site values are left out of the script.
+        sbatch = []
+        if res["partition"]:
+            sbatch.append(f"#SBATCH --partition={res['partition']}")
+        sbatch.append(f"#SBATCH --nodes={nodes}")
         if gpu:
-            image, image_tar = GPU_IMAGE, GPU_IMAGE_TAR
             gres = f"gpu:{gpu_type}:{gpus}" if gpu_type else f"gpu:{gpus}"
-            partition_line = "#SBATCH --partition=pgpu"
-            # own3: GTX 1080 Ti (cc6.1) has no kernels in the GPU image.
-            # own10: our user is not in the docker group there.
-            nodelist_line = f"#SBATCH --gres={gres}\n{pad}#SBATCH --exclude={GPU_EXCLUDE_NODES}"
-            cpus_per_task = 4
-            ntasks = gpus
-            device_arg = "--device nvidia.com/gpu=all "
-            mpi_cmd = f"mpirun -np {gpus} pw.x -nk {gpus}"
-            kind = "GPU"
+            sbatch.append(f"#SBATCH --gres={gres}")
+            ntasks = gpus  # one MPI rank per GPU
+        if res["nodelist"]:
+            sbatch.append(f"#SBATCH --nodelist={res['nodelist']}")
+        if res["exclude"]:
+            sbatch.append(f"#SBATCH --exclude={res['exclude']}")
+        sbatch += [
+            f"#SBATCH --cpus-per-task={res['cpus_per_task']}",
+            f"#SBATCH --ntasks={ntasks}",
+            f"#SBATCH --mem-per-cpu={mem_per_cpu}",
+            f"#SBATCH --time={walltime}",
+        ]
+        if site["account"]:
+            sbatch.append(f"#SBATCH --account={site['account']}")
+        if site["qos"]:
+            sbatch.append(f"#SBATCH --qos={site['qos']}")
+        sbatch += list(res.get("extra_sbatch") or [])
+        sbatch_lines = ("\n" + pad).join(sbatch)
+
+        qe_bin = site["qe_bin"]
+        nk = f" -nk {gpus}" if gpu else ""  # k-point pools: one per GPU
+        if site["launcher"] == "srun":
+            qe_cmd = f"srun {qe_bin}{nk}"
+        elif gpu:
+            qe_cmd = f"mpirun -np {gpus} {qe_bin}{nk}"
         else:
-            image, image_tar = CPU_IMAGE, CPU_IMAGE_TAR
-            partition_line = "#SBATCH --partition=pzero"
-            nodelist_line = "#SBATCH --nodelist=own9"
-            cpus_per_task = 1
-            device_arg = ""
-            mpi_cmd = f"mpirun --bind-to none -np {ntasks} pw.x"
-            kind = "CPU"
-        pw_bin = "pw.x"  # QE comes from the image
-        env_lines = "\n".join(
-            [
-                "export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK",
-                f'IMG="{image}"',
-                "# Load the image on this node once (flock: one loader per node).",
-                'if ! docker image inspect "$IMG" >/dev/null 2>&1; then',
-                f"    flock /tmp/advqm_docker_load.lock sh -c 'docker image inspect {image} >/dev/null 2>&1 || docker load -i {image_tar}'",
-                "fi",
-            ]
-        ).replace("\n", "\n" + pad)
-        launch = "\n".join(
-            [
-                f"docker run --rm {device_arg}\\",
-                '    --label user="$(id -un)" \\',
-                f'    --label description="advQMcalc_test QE {kind} job ($SLURM_JOB_NAME)" \\',
-                '    --user "$(id -u):$(id -g)" -e HOME=/tmp -e OMP_NUM_THREADS \\',
-                f'    -v {DATA_ROOT}:{DATA_ROOT} -v "$localscratch:$localscratch" \\',
-                '    -w "$workdir" "$IMG" \\',
-                f'    {mpi_cmd} -i "$infile.in" > "$infile.out"',
-            ]
-        ).replace("\n", "\n" + pad)
+            qe_cmd = f"mpirun --bind-to none -np {ntasks} {qe_bin}"
+
+        workdir = site["workdir"]
+        local_scratch = site["local_scratch"]
+        remote_workdir = not workdir.startswith("$indir")
+        if docker:
+            # QE always runs from a docker image (DevOps policy: containers only).
+            # Paths are mounted at identical locations so the generated QE input
+            # (pseudo_dir, outdir) works unchanged, and MPI runs inside the
+            # container as one job (plain `srun pw.x` gave uncoordinated copies).
+            image, image_tar = res["image"], res["image_tar"]
+            data_root = site["data_root"]
+            env_lines = "\n".join(
+                [
+                    "export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK",
+                    f'IMG="{image}"',
+                    "# Load the image on this node once (flock: one loader per node).",
+                    'if ! docker image inspect "$IMG" >/dev/null 2>&1; then',
+                    f"    flock /tmp/advqm_docker_load.lock sh -c 'docker image inspect {image} >/dev/null 2>&1 || docker load -i {image_tar}'",
+                    "fi",
+                    "# ponytail: retain the existing cluster-specific QE executable and",
+                    "# paths; ceiling: the UI's qe_command field is ignored here. Upgrade",
+                    "# by parameterizing this script with a validated qe_command value.",
+                ]
+            ).replace("\n", "\n" + pad)
+            mounts = f'-v {data_root}:{data_root} -v "$localscratch:$localscratch"'
+            if remote_workdir:
+                mounts += ' -v "$workdir:$workdir"'
+            launch = "\n".join(
+                [
+                    f"docker run --rm {'--device nvidia.com/gpu=all ' if gpu else ''}\\",
+                    '    --label user="$(id -un)" \\',
+                    f'    --label description="advQMcalc_test QE {kind} job ($SLURM_JOB_NAME)" \\',
+                    '    --user "$(id -u):$(id -g)" -e HOME=/tmp -e OMP_NUM_THREADS \\',
+                    f"    {mounts} \\",
+                    '    -w "$workdir" "$IMG" \\',
+                    f'    {qe_cmd} -i "$infile.in" > "$infile.out"',
+                ]
+            ).replace("\n", "\n" + pad)
+        else:
+            # QE installed on the cluster, made available with `module load`.
+            env_lines = "\n".join(
+                ["export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK"]
+                + [f"module load {m}" for m in site["modules"]]
+            ).replace("\n", "\n" + pad)
+            launch = f'{qe_cmd} -i "$infile.in" > "$infile.out"'
+
+        # A workdir outside the run folder (cluster scratch): copy the .out back
+        # even when QE fails, so the Runs page can still show the error.
+        copy_back = (
+            "\n" + pad + "trap 'cp \"$workdir/$infile.out\" \"$indir/\" 2>/dev/null || true' EXIT"
+            if remote_workdir else ""
+        )
 
         script_text = dedent(
             f"""\
             #!/bin/bash
             #SBATCH --job-name={job_name}
             #SBATCH --output={slurm_out_path}
-            {partition_line}
-            #SBATCH --nodes={nodes}
-            {nodelist_line}
-            #SBATCH --cpus-per-task={cpus_per_task}
-            #SBATCH --ntasks={ntasks}
-            #SBATCH --mem-per-cpu={mem_per_cpu}
-            #SBATCH --time={walltime}
+            {sbatch_lines}
 
             set -e
 
             {env_lines}
-            # ponytail: retain the existing cluster-specific QE executable and
-            # paths; ceiling: the UI's qe_command field is ignored here. Upgrade
-            # by parameterizing this script with a validated qe_command value.
-            PW_BIN={pw_bin}
+            PW_BIN={qe_bin}
 
             infile=$(basename "{qe_input_path.name}" .in)
             indir="{input_dir}"
-            workdir="$indir/work_$SLURM_JOBID"
+            workdir="{workdir}"
 
-            mkdir -p "$workdir" && cd "$workdir" && echo "$workdir"
+            mkdir -p "$workdir" && cd "$workdir" && echo "$workdir"{copy_back}
             cp -r "$indir/$infile.in" "$workdir"
 
             # QE's scratch/coordination files (*.save/, pwscf.para,
@@ -193,7 +230,7 @@ class RunContext:
             # instead — only the small .out file (captured via the stdout
             # redirect below) needs to survive, we don't use
             # restart-from-checkpoint anywhere in this pipeline.
-            localscratch="/tmp/qe_scratch_$SLURM_JOBID"
+            localscratch="{local_scratch}"
             mkdir -p "$localscratch"
             if grep -q "outdir" "$infile.in"; then
                 sed -i "s#^\\s*outdir.*#  outdir = '$localscratch'#" "$infile.in"

@@ -5,7 +5,9 @@ import threading
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-UPLOAD_DIR = Path("/mnt/own6d/qe_workflow/data/.voila_uploads")
+from advQMcalc_test.site_config import SITE
+
+UPLOAD_DIR = Path(SITE["app"]["upload_dir"])
 
 for _p in (PROJECT_ROOT / "advQMcalc_test" / "src",):
     if str(_p) not in sys.path:
@@ -315,6 +317,8 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
     text-decoration:none !important; font-size:14px; line-height:28px;
     font-family:'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
 .advqm-csv-download:hover { background:#0f56a4 !important; }
+/* Doc accordion links (references, emails): visibly links despite Vuetify's reset. */
+.advqm-docs a { color:#1565c0 !important; text-decoration:underline !important; }
 /* Results table: cells wrap instead of being cut off / overflowing */
 .advqm-results-row .widget-html-content { white-space:normal; overflow-wrap:anywhere; line-height:1.4; }
 /* Results table: every header and value centred in its column (same side padding

@@ -15,7 +15,9 @@ import ipyvuetify as ipv
 
 from helpers import _STATUS_MAP, status_badge_html, status_category
 
-DEFAULT_RUNS_DIR = "/mnt/own6d/qe_workflow/data/runs"
+from advQMcalc_test.site_config import SITE
+
+DEFAULT_RUNS_DIR = SITE["app"]["runs_dir"]
 # Every runs folder the app has been used with (the New Calculation page lets the
 # user pick any "Runs Directory"). The Dashboard and Results read all of them, not
 # just the default one, so a batch submitted to another folder still shows up.

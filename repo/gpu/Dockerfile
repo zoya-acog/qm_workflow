@@ -1,8 +1,9 @@
 # Quantum ESPRESSO GPU build covering RTX 4090 (cc89) and RTX 5080 (cc120).
-# NVIDIA's prebuilt hpc/quantum_espresso:qe-7.3.1 lacks cc89/cc120 kernels.
+# QE 7.1 matches the client cluster. NVIDIA's prebuilt hpc/quantum_espresso
+# images lack cc89/cc120 kernels.
 FROM nvcr.io/nvidia/nvhpc:25.7-devel-cuda12.9-ubuntu22.04
 
-ARG QE_VERSION=7.3.1
+ARG QE_VERSION=7.1
 ENV NVHPC_ROOT=/opt/nvidia/hpc_sdk/Linux_x86_64/25.7
 ENV PATH=${NVHPC_ROOT}/comm_libs/mpi/bin:${NVHPC_ROOT}/compilers/bin:${PATH}
 

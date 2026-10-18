@@ -1,7 +1,7 @@
-# CPU Quantum ESPRESSO 7.2 (same version as the host install) with Open MPI,
+# CPU Quantum ESPRESSO 7.1 (same version as the client cluster) with Open MPI,
 # so MPI runs inside one container instead of uncoordinated `srun pw.x` copies.
 FROM ubuntu:22.04
-ARG QE_VERSION=7.2
+ARG QE_VERSION=7.1
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gfortran gcc make curl ca-certificates git \

@@ -10,6 +10,7 @@ from pathlib import Path
 import ipywidgets as widgets
 import ipyvuetify as ipv
 
+from advQMcalc_test.site_config import SITE
 from helpers import (
     UPLOAD_DIR,
     _process_single_cif,
@@ -75,7 +76,7 @@ def _build_new_run_page(nav: _Nav):
         placeholder="Used when k-points Grid is blank", outlined=True, dense=True,
     )
     pseudo_dir_w = ipv.TextField(label="Pseudopotential Directory",
-                                  v_model="/mnt/own6d/qe_workflow/data/pseudos",
+                                  v_model=SITE["app"]["pseudo_dir"],
                                   placeholder="/path/to/pseudo", outlined=True, dense=True)
     pp_map_w = ipv.TextField(
         label="PP Map (Optional)", v_model="", placeholder="/path/to/pp_map.json",
@@ -94,8 +95,7 @@ def _build_new_run_page(nav: _Nav):
         label="GPU Type",
         items=[
             {"text": "Any", "value": ""},
-            {"text": "RTX 4090", "value": "nvidia_geforce_rtx_4090"},
-            {"text": "RTX 5080", "value": "nvidia_geforce_rtx_5080"},
+            *SITE["app"]["gpu_types"],
         ],
         v_model="", outlined=True, dense=True, disabled=True,
     )
@@ -126,14 +126,14 @@ def _build_new_run_page(nav: _Nav):
         clearable=True,
     )
     ecutwfc_w = ipv.TextField(label="Wavefunction Cutoff (Ry)", v_model="",
-                                placeholder="e.g. 50 Ry", outlined=True, dense=True)
+                                placeholder="e.g. 50", outlined=True, dense=True)
     ecutrho_w = ipv.TextField(label="Charge Density Cutoff (Ry)", v_model="",
                                 outlined=True, dense=True)
     # Hover text for the ⓘ icon next to a field's caption (keyed by widget id).
     field_info = {
         id(ecutwfc_w): "Plane-wave cutoff for wavefunctions (ecutwfc), e.g. 50 Ry.\n"
                        "Leave blank to use the minimum suggested by the pseudopotential files.",
-        id(ecutrho_w): "e.g. 600 Ry (8 to 12 times the Wavefunction Cutoff)",
+        id(ecutrho_w): "e.g. 600 (8 to 12 times the Wavefunction Cutoff)",
     }
     xdm_a1_w = ipv.TextField(label="XDM a1 (XDM Only)", v_model="",
                              placeholder="e.g. 0.6836", outlined=True, dense=True, disabled=True)
@@ -156,7 +156,7 @@ def _build_new_run_page(nav: _Nav):
     occupations_w = ipv.TextField(label="Occupations", v_model="", placeholder="e.g. smearing", outlined=True, dense=True)
     smearing_w = ipv.TextField(label="Smearing", v_model="", placeholder="e.g. gaussian", outlined=True, dense=True)
     degauss_w = ipv.TextField(label="Degauss (Ry)", v_model="",
-                                placeholder="e.g. 0.05 Ry", outlined=True, dense=True)
+                                placeholder="e.g. 0.05", outlined=True, dense=True)
     field_info.update({
         id(xdm_a1_w): "XDM damping parameter a1 (dimensionless), used only with the XDM vdW correction.\n"
                       "Autofilled with QE's default 0.6836; the value should match the DFT functional.",
@@ -222,7 +222,7 @@ def _build_new_run_page(nav: _Nav):
         log_name_w.v_model = "advQMcalc.log"
         kpoints_w.v_model = ""
         ksep_w.v_model = "0.03"
-        pseudo_dir_w.v_model = "/mnt/own6d/qe_workflow/data/pseudos"
+        pseudo_dir_w.v_model = SITE["app"]["pseudo_dir"]
         pp_map_w.v_model = ""
         walltime_w.v_model = "12:00:00"
         ntasks_w.v_model = "8"

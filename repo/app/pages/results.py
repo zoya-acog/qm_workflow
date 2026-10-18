@@ -4,6 +4,7 @@ import base64
 import csv
 import html
 import io
+import json
 import re
 import threading
 import time
@@ -11,6 +12,8 @@ import types
 import uuid
 import zipfile
 import shlex
+import warnings
+from functools import lru_cache
 from pathlib import Path
 
 import ipywidgets as widgets
@@ -32,7 +35,7 @@ def _cif_result_metadata(row: dict) -> dict[str, str | None]:
     candidates = [source_cif, run_path / "inputs" / "crystal" / source_cif.name]
     cif_path = next((p for p in candidates if p.is_file()), None)
     if cif_path is None:
-        return {"space_group": "–", "cell_parameters": "–", "formula": None}
+        return {"space_group": "–", "cell_parameters": "–", "formula": None, "cif_path": None}
 
     tags: dict[str, str] = {}
     try:
@@ -50,7 +53,7 @@ def _cif_result_metadata(row: dict) -> dict[str, str | None]:
             if tokens:
                 tags[parts[0].lower()] = " ".join(tokens)
     except OSError:
-        return {"space_group": "–", "cell_parameters": "–", "formula": None}
+        return {"space_group": "–", "cell_parameters": "–", "formula": None, "cif_path": None}
 
     space_group = next((
         tags[key] for key in (
@@ -87,7 +90,8 @@ def _cif_result_metadata(row: dict) -> dict[str, str | None]:
             "_chemical_formula_structural",
         ) if tags.get(key)
     ), None)
-    return {"space_group": space_group, "cell_parameters": cell, "formula": formula}
+    return {"space_group": space_group, "cell_parameters": cell, "formula": formula,
+            "cif_path": str(cif_path)}
 
 
 def _formula_signature(formula: str | None) -> tuple[tuple[tuple[str, float], ...], float] | None:
@@ -103,6 +107,72 @@ def _formula_signature(formula: str | None) -> tuple[tuple[tuple[str, float], ..
     if total <= 0:
         return None
     return tuple(sorted(counts.items())), total
+
+
+@lru_cache(maxsize=512)
+def _cif_molecule_cached(cif_path: str, mtime: float) -> tuple[int, str] | None:
+    """(atoms per molecule, molecule formula) found by pymatgen, or None.
+
+    Bonded atoms are grouped into molecules (JmolNN covalent radii). A close
+    contact can make bond detection cut a molecule differently (e.g. C6H6O and
+    C6H5O in one cell), so the molecule is the one whose formula, times a whole
+    number, gives the cell's formula. Hydrates, salts and co-crystals have no
+    such single molecule; their unit is the CIF's formula unit (the cell divided
+    by _cell_formula_units_Z, e.g. acid + 2 H2O). None when pymatgen is missing,
+    the CIF does not parse, or neither applies; callers then fall back to the
+    CIF's _chemical_formula_sum.
+    """
+    try:
+        from pymatgen.analysis.graphs import StructureGraph
+        from pymatgen.analysis.local_env import JmolNN
+        from pymatgen.core import Structure
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # pymatgen CIF parser warnings
+            structure = Structure.from_file(cif_path)
+            make = (getattr(StructureGraph, "from_local_env_strategy", None)
+                    or StructureGraph.with_local_env_strategy)
+            molecules = make(structure, JmolNN()).get_subgraphs_as_molecules()
+    except Exception:
+        return None
+    cell = structure.composition
+    for molecule in sorted(molecules, key=len, reverse=True):
+        comp = molecule.composition
+        z = cell.num_atoms / comp.num_atoms
+        if z.is_integer() and all(abs(cell[el] - z * comp[el]) < 1e-6 for el in cell):
+            return len(molecule), comp.formula
+    z_tag = re.search(r"(?im)^\s*_cell_formula_units_Z\s+(\d+)", Path(cif_path).read_text(errors="ignore"))
+    z = int(z_tag.group(1)) if z_tag else 0
+    if z > 0 and all(abs(n / z - round(n / z)) < 1e-6 for n in cell.values()):
+        unit = cell / z
+        return round(unit.num_atoms), unit.formula
+    return None
+
+
+def _cif_molecule(cif_path: str | None, run_path: str | None = None) -> tuple[int, str] | None:
+    """Cached _cif_molecule_cached: in memory, and on disk in the run's results/
+    folder (pymatgen takes ~1 s per CIF, too slow to redo for every page view)."""
+    if not cif_path:
+        return None
+    try:
+        mtime = Path(cif_path).stat().st_mtime
+    except OSError:
+        return None
+    cache = Path(run_path) / "results" / "cif_molecule.json" if run_path else None
+    if cache is not None:
+        try:
+            saved = json.loads(cache.read_text())
+            if saved.get("cif") == cif_path and saved.get("mtime") == mtime and saved.get("v") == 3:
+                return tuple(saved["molecule"]) if saved.get("molecule") else None
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    molecule = _cif_molecule_cached(cif_path, mtime)
+    if cache is not None:
+        try:
+            cache.write_text(json.dumps({"v": 3, "cif": cif_path, "mtime": mtime, "molecule": molecule}))
+        except OSError:
+            pass  # read-only run folder: still correct, just not cached on disk
+    return molecule
 
 
 def _qe_cell_atom_count(row: dict) -> int | None:
@@ -642,8 +712,11 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
         row_data = []
         for row in rows:
             metadata = _cif_result_metadata(row)
-            formula = _formula_signature(metadata.get("formula"))
+            # Molecule or formula unit from pymatgen (see _cif_molecule_cached); else the CIF formula tag.
+            molecule = _cif_molecule(metadata.get("cif_path"), row.get("run_path"))
+            formula = _formula_signature(molecule[1] if molecule else metadata.get("formula"))
             nat = _qe_cell_atom_count(row)
+            # Z of the QE cell (cif2cell may write a smaller cell than the CIF's).
             formula_units = nat / formula[1] if nat and formula else None
             energy = row.get("energy_ry")
             per_formula_energy = (

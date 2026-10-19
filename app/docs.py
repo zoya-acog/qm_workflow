@@ -5,8 +5,10 @@ import html
 import ipywidgets as widgets
 from advQMcalc_test.site_config import SITE
 
-# Shown under "Contact". A site sets its own in the site config:
-#   "app": {"contact": [{"name": "Dr. A", "email": "a@example.com"}]}
+# Shown under "Contact". A site sets its own in config.yaml:
+#   app:
+#     contact:
+#       - {name: Dr. A, email: a@example.com}
 # An empty list hides the Contact section.
 _DEFAULT_CONTACTS = [
     {"name": "Dr. Rahul Nikhar", "email": "Rahul.Nikhar@pfizer.com"},

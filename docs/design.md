@@ -20,7 +20,7 @@ and docs; the backend is changed only by agreement.
 **Decision:** every cluster-specific value (launch mode, MPI launcher, modules,
 partitions, node lists, account/QOS, scratch and app paths, GPU names) lives in
 `site_config.py`. Our cluster is the built-in default; another site points
-`ADVQM_SITE_CONFIG` at a JSON file that overrides it.
+`ADVQM_SITE_CONFIG` at a YAML file (`config.yaml`, used by `make run`) that overrides it.
 
 **Options:** separate code branches per site (rejected: fixes would have to be
 made twice); environment variables per value (rejected: dozens of variables,

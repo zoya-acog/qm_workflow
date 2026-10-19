@@ -1,6 +1,7 @@
 VENV ?= .venv
 PY := $(VENV)/bin/python
 PORT ?= 8866
+CONFIG ?= config.yaml
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
 
 .DEFAULT_GOAL := help
@@ -28,8 +29,9 @@ build: ## Byte-compile the app and backend (catches syntax errors)
 test: ## Run all tests
 	$(PY) -m pytest -q tests
 
-run: ## Run the web app on 127.0.0.1:PORT (site settings from ADVQM_SITE_CONFIG)
-	$(VENV)/bin/voila --port=$(PORT) --Voila.ip=127.0.0.1 --no-browser --autoreload=False \
+run: ## Run the web app on 127.0.0.1:PORT with the site settings in CONFIG (config.yaml)
+	@test -f "$(CONFIG)" || { echo "No $(CONFIG): copy config.example.yaml to config.yaml and fill it in (docs/installation.md, step 4)."; exit 1; }
+	ADVQM_SITE_CONFIG="$(abspath $(CONFIG))" $(VENV)/bin/voila --port=$(PORT) --Voila.ip=127.0.0.1 --no-browser --autoreload=False \
 	  --VoilaConfiguration.enable_nbextensions=True \
 	  "--Voila.tornado_settings={'websocket_ping_interval': 20}" \
 	  "--VoilaConfiguration.file_whitelist=['.*\\.(png|jpg|gif|svg)', 'downloads/qe_output_files_[0-9a-f]{32}\\.zip', 'downloads/run_logs_[0-9a-f]{32}\\.zip']" \

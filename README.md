@@ -24,8 +24,8 @@ make run       # app on http://127.0.0.1:8866
 
 ```bash
 make install
-cp site.example.json site.json            # fill in modules, partitions, paths
-ADVQM_SITE_CONFIG=$PWD/site.json make run
+cp config.example.yaml config.yaml        # fill in modules, partitions, paths
+make run
 ```
 
 The machine running the app must be able to run `sbatch`/`squeue` and see the runs and pseudopotential folders at the same paths as the compute nodes. QE comes from your cluster (e.g. `module load quantum-espresso/7.1`); there is no container in this distribution.
@@ -34,7 +34,7 @@ The machine running the app must be able to run `sbatch`/`squeue` and see the ru
 
 ```
 ├── README.md · AGENTS.md · Makefile      front doors · automation contract
-├── requirements.txt · site.example.json  Python dependencies · site config template
+├── requirements.txt · config.example.yaml  Python dependencies · configuration template
 ├── app/                                  Voila web app (app.ipynb → app_src.py, pages/)
 ├── advQMcalc_test/                       backend: CIF → QE input, SLURM jobs, results
 ├── tests/                                pytest suite, sample CIFs, recorded job scripts

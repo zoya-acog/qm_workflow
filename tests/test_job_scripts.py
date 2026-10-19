@@ -3,7 +3,7 @@
 Entered through RunContext.write_crystal_slurm_script, the call the CLI makes
 for every run. The CLI around it also needs cif2cell and sbatch, so the tests
 start one step inside it. The site config is swapped the way a site does it:
-by loading its JSON file.
+by loading its config file.
 """
 
 import subprocess
@@ -17,7 +17,8 @@ from advQMcalc_test.site_config import load_site_config
 from conftest import REPO
 
 GOLDEN = Path(__file__).resolve().parent / "golden"
-DELTAHPC = REPO / "advQMcalc_test" / "site_configs" / "deltahpc.example.json"
+DELTAHPC = REPO / "advQMcalc_test" / "site_configs" / "deltahpc.example.yaml"
+EXAMPLE = REPO / "config.example.yaml"
 
 
 def _script(tmp_path, monkeypatch, site_file=None, **kwargs) -> str:
@@ -66,8 +67,8 @@ def test_docker_site_rejects_srun(tmp_path, monkeypatch, tmp_path_factory):
 
 
 def test_unknown_launch_mode_is_refused(tmp_path):
-    site = tmp_path / "site.json"
-    site.write_text('{"launch_mode": "podman"}')
+    site = tmp_path / "config.yaml"
+    site.write_text("launch_mode: podman\n")
     with pytest.raises(ValueError, match="launch_mode"):
         load_site_config(site)
 
@@ -80,3 +81,16 @@ def test_generated_scripts_are_valid_bash(tmp_path, monkeypatch, site_file, kwar
     script.write_text(_script(tmp_path, monkeypatch, site_file=site_file, **kwargs))
     result = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_example_config_loads_as_a_module_site():
+    site = load_site_config(EXAMPLE)
+    assert (site["launch_mode"], site["launcher"]) == ("module", "srun")
+    assert site["modules"] == ["quantum-espresso/7.1"]
+    assert site["app"]["contact"] == [{"name": "Your Name", "email": "you@example.com"}]
+
+
+def test_json_config_still_accepted(tmp_path):
+    site = tmp_path / "site.json"
+    site.write_text('{"launch_mode": "module", "modules": ["qe/7.1"]}')
+    assert load_site_config(site)["modules"] == ["qe/7.1"]

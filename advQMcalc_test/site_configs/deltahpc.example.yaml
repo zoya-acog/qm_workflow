@@ -1,0 +1,18 @@
+# DeltaHPC: reproduces the advQMcalc_test 0.0.16 job script (module load,
+# srun pw.x, /hpfs scratch). Copy to config.yaml and fill in the app paths.
+name: deltahpc
+launch_mode: module
+launcher: srun
+modules: [medsci, quantum-espresso/7.1]
+qe_bin: pw.x
+workdir: /hpfs/userws/$USER/workdir/$SLURM_JOBID
+local_scratch: /hpfs/userws/$USER/workdir/$SLURM_JOBID/tmp
+account: ''
+qos: ''
+cpu: {partition: '', nodelist: '', exclude: '', cpus_per_task: 1}
+gpu: {partition: '', nodelist: '', exclude: '', cpus_per_task: 4}
+app:
+  upload_dir: /path/to/shared/qe_workflow/uploads
+  runs_dir: /path/to/shared/qe_workflow/runs
+  pseudo_dir: /path/to/shared/qe_workflow/pseudos
+  gpu_types: []

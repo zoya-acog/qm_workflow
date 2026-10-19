@@ -1,10 +1,10 @@
 """Cluster-specific settings for the generated SLURM job scripts.
 
 The built-in DEFAULT_SITE reproduces our own cluster (QE in Docker images,
-partitions pzero/pgpu). Another cluster supplies a JSON file and points the
-ADVQM_SITE_CONFIG environment variable at it; its keys override the defaults
-(nested "cpu"/"gpu" sections are merged key by key). See site_configs/ for
-examples.
+partitions pzero/pgpu). Another cluster supplies a config file (YAML, or
+JSON) and points the ADVQM_SITE_CONFIG environment variable at it; its keys
+override the defaults (nested "cpu"/"gpu" sections are merged key by key). See
+config.example.yaml and site_configs/ for examples.
 
 Keys
   launch_mode    "docker": run QE from a Docker image (ours).
@@ -98,12 +98,26 @@ def _merge(base: dict, override: dict) -> dict:
     return out
 
 
+def _read_config_file(path: Path) -> dict:
+    """Settings from a .yaml/.yml file (PyYAML, imported only when needed) or .json file."""
+    text = path.read_text()
+    if path.suffix.lower() in (".yaml", ".yml"):
+        import yaml
+
+        data = yaml.safe_load(text) or {}
+    else:
+        data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError(f"site config {path}: expected key: value settings at the top level")
+    return data
+
+
 def load_site_config(path: str | os.PathLike | None = None) -> dict:
-    """DEFAULT_SITE overridden by the JSON file at `path` (or $ADVQM_SITE_CONFIG)."""
+    """DEFAULT_SITE overridden by the config file at `path` (or $ADVQM_SITE_CONFIG)."""
     path = path or os.environ.get(ENV_VAR)
     site = copy.deepcopy(DEFAULT_SITE)
     if path:
-        site = _merge(site, json.loads(Path(path).read_text()))
+        site = _merge(site, _read_config_file(Path(path)))
     for key, allowed in _VALID.items():
         if site[key] not in allowed:
             raise ValueError(f"site config {key}={site[key]!r}; expected one of {allowed}")

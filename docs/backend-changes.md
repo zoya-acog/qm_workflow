@@ -66,18 +66,18 @@ unaffected when `--gpu` is not given.
 In 0.0.16, the SLURM job script was written for one cluster: module names,
 scratch path and launcher were fixed in `run_context.py`. These settings now
 come from a **site configuration** (`site_config.py`), which each site
-overrides with a JSON file named in the `ADVQM_SITE_CONFIG` environment
-variable.
+overrides with a YAML file, `config.yaml` (or any file named in the
+`ADVQM_SITE_CONFIG` environment variable).
 
 | Setting | Example |
 |---|---|
-| How QE is provided | `"launch_mode": "module"`, `"modules": ["medsci", "quantum-espresso/7.1"]` |
-| MPI launcher | `"launcher": "srun"` |
-| Working directory | `"workdir": "/hpfs/userws/$USER/workdir/$SLURM_JOBID"` |
+| How QE is provided | `launch_mode: module`, `modules: [medsci, quantum-espresso/7.1]` |
+| MPI launcher | `launcher: srun` |
+| Working directory | `workdir: /hpfs/userws/$USER/workdir/$SLURM_JOBID` |
 | SLURM resources | partition, account, QOS, node list, threads per rank (empty values are omitted) |
 | Application paths | runs, uploads and pseudopotential directories |
 
-`advQMcalc_test/site_configs/deltahpc.example.json` reproduces the 0.0.16 job
+`advQMcalc_test/site_configs/deltahpc.example.yaml` reproduces the 0.0.16 job
 script: the generated script contains every line of the original, in the same
 order. The built-in defaults describe the development cluster, so always run
 with your own configuration file (see [installation.md](installation.md)).
@@ -92,4 +92,5 @@ only the actual changes:
 diff -r --strip-trailing-cr <path-to-0.0.16>/advQMcalc_test advQMcalc_test
 ```
 
-The backend still has no third-party dependencies.
+The backend has no third-party dependencies, except PyYAML for reading
+`config.yaml`.

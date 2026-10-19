@@ -75,37 +75,42 @@ ls /shared/qe_workflow/pseudos/*.UPF | head
 srun -N1 -n1 ls /shared/qe_workflow/runs     # same path from a compute node
 ```
 
-## 4. Write the site config
+## 4. Write the configuration
+
+All site settings live in one file, `config.yaml`:
 
 ```bash
-cp site.example.json site.json               # gitignored
+cp config.example.yaml config.yaml           # gitignored
 ```
 
-Fill in:
+`config.example.yaml` explains every setting next to its value. Fill in
+everything under **Required**:
 
-- `modules`: what `module load` gives a job `pw.x` (e.g. `["quantum-espresso/7.1"]`).
+- `modules`: what a job loads to get `pw.x` (e.g. `quantum-espresso/7.1`).
 - `launcher`: `srun` if your SLURM starts MPI programs directly; otherwise `mpirun`.
-- `cpu` / `gpu` `partition`, and `account` / `qos` if your site requires them.
-  Empty values are left out of the job script.
 - `workdir`: a scratch path; `$USER` and `$SLURM_JOBID` are expanded by the job.
 - `app`: the three paths from step 3, the GPU names your SLURM uses
-  (`gpu_types`, e.g. `{"text": "A100", "value": "a100"}`), and the contacts
+  (`gpu_types`, e.g. `- {text: A100, value: a100}`), and the contacts
   shown in the app.
 
-Keys you leave out keep their built-in default, which describes **our**
-cluster, so set every path.
+Then, under **SLURM resources**, the `cpu` / `gpu` `partition`, and `account` /
+`qos` if your site requires them. Empty values are left out of the job script.
+
+Keys you leave out keep their built-in default, which describes the
+developers' cluster, so set every path. `make run` refuses to start without
+`config.yaml`; to keep the file elsewhere, run `make run CONFIG=/path/to/config.yaml`.
 
 ### Check
 
 ```bash
-ADVQM_SITE_CONFIG=$PWD/site.json .venv/bin/python -c \
+ADVQM_SITE_CONFIG=$PWD/config.yaml .venv/bin/python -c \
   "from advQMcalc_test.site_config import SITE; print(SITE['launch_mode'], SITE['app']['runs_dir'])"
 ```
 
 ## 5. Launch the app
 
 ```bash
-ADVQM_SITE_CONFIG=$PWD/site.json make run    # http://127.0.0.1:8866
+make run                                     # http://127.0.0.1:8866
 ```
 
 The app listens on 127.0.0.1 only. From your desktop, forward the port:
@@ -135,7 +140,7 @@ On the command line, the job script is in
 |---|---|
 | Every page shows "Script error for jupyter-vue" | widget extensions not registered: rerun `make install` |
 | Submit Run fails with "sbatch not found" | the app machine has no SLURM client, or it is not on `PATH` when the app starts |
-| Job FAILED at once; `.slurm.out` says `pw.x: command not found` | `modules` in `site.json` does not provide `pw.x` |
+| Job FAILED at once; `.slurm.out` says `pw.x: command not found` | `modules` in `config.yaml` does not provide `pw.x` |
 | Job fails reading pseudopotentials | `pseudo_dir` not visible from compute nodes, or a missing element `.UPF` |
 | Status shows **ENDED** instead of COMPLETED | SLURM accounting (`sacct`) is unavailable; the job left the queue. Check its `.out` file |
 | Results show "–" for relative energy | the selected runs are different compounds, or one CIF could not be read |

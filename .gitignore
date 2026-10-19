@@ -13,5 +13,5 @@ test.txt
 .venv/
 .pytest_cache/
 
-# Filled-in site config (copied from site.example.json)
-site.json
+# Filled-in site config (copied from config.example.yaml)
+config.yaml

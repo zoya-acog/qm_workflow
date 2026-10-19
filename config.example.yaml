@@ -1,0 +1,71 @@
+# Site configuration for the QE crystal workflow app.
+#
+#   cp config.example.yaml config.yaml     # then edit, then:  make run
+#
+# One file holds every setting the app needs on your cluster. config.yaml is
+# gitignored. `make run` uses ./config.yaml; to keep it elsewhere, set
+# ADVQM_SITE_CONFIG=/path/to/config.yaml.
+#
+# Change everything under "Required". Keys you leave out keep their built-in
+# defaults, which describe the developers' cluster, not yours.
+# See docs/installation.md, step 4.
+
+name: my-cluster
+
+# ─── Required ────────────────────────────────────────────────────────────────
+
+# How a job gets Quantum ESPRESSO: "module" loads your cluster's QE install.
+launch_mode: module
+
+# Modules a job loads before running pw.x. A SLURM job inherits nothing from
+# the shell that submitted it, so list everything pw.x needs.
+modules:
+  - quantum-espresso/7.1
+
+# "srun" if your SLURM starts MPI programs itself (most clusters); else "mpirun".
+launcher: srun
+
+# Where QE runs during a job (scratch). $USER and $SLURM_JOBID are expanded
+# by the job; the output file is copied back to the run folder at the end.
+workdir: /scratch/$USER/qe_workflow/$SLURM_JOBID
+local_scratch: /scratch/$USER/qe_workflow/$SLURM_JOBID/tmp
+
+app:
+  # Run folders: inputs, job scripts, QE output, results.
+  # Must be visible at this same path from the compute nodes.
+  runs_dir: /shared/qe_workflow/runs
+  # .UPF pseudopotential files, one per element. Visible from compute nodes.
+  pseudo_dir: /shared/qe_workflow/pseudos
+  # CIFs uploaded through the browser (app machine only).
+  upload_dir: /shared/qe_workflow/uploads
+
+  # GPU choices in the New Run form; value is your SLURM GRES name.
+  # Leave empty until GPU runs are enabled, e.g.
+  #   - {text: A100, value: a100}
+  gpu_types: []
+
+  # Shown under "References and Contacts" in the app; [] hides the section.
+  contact:
+    - {name: Your Name, email: you@example.com}
+
+# ─── SLURM resources ─────────────────────────────────────────────────────────
+# Empty values are left out of the job script.
+
+account: ""
+qos: ""
+
+cpu:
+  partition: ""          # e.g. compute
+  nodelist: ""           # pin jobs to nodes (rarely needed)
+  exclude: ""            # nodes to avoid
+  cpus_per_task: 1       # OpenMP threads per MPI rank (1 = pure MPI)
+  extra_sbatch: []       # extra lines, e.g. ["#SBATCH --constraint=avx512"]
+
+gpu:
+  partition: ""          # e.g. gpu
+  nodelist: ""
+  exclude: ""
+  cpus_per_task: 4
+  extra_sbatch: []
+
+qe_bin: pw.x             # QE executable name or full path

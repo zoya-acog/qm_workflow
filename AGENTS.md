@@ -12,7 +12,7 @@ Web app (Voila) that turns crystal CIFs into Quantum ESPRESSO energy runs on a S
 | site.example.json | Template a site copies to site.json (gitignored); also sets contacts shown in the app |
 | advQMcalc_test/site_configs/ | Example site configs (DeltaHPC) |
 | tests/ | pytest suite; tests/data/ holds real CIFs, tests/golden/ recorded job scripts |
-| docs/ | installation.md (setup), vision.md, design.md (decisions), status.md (state and TODO) |
+| docs/ | installation.md (setup), backend-changes.md (changes to the client backend), vision.md, design.md (decisions), status.md (state and TODO) |
 
 ## Rules
 

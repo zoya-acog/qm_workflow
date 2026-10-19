@@ -18,7 +18,7 @@ make test      # pytest suite (no QE or SLURM needed)
 make run       # app on http://127.0.0.1:8866
 ```
 
-`make help` lists every target. The map of the code is in [AGENTS.md](AGENTS.md). The backend (`advQMcalc_test/`) is client-provided and is not changed here.
+`make help` lists every target. The map of the code is in [AGENTS.md](AGENTS.md). The backend (`advQMcalc_test/`) is client-provided; what we changed in it, and why, is in [docs/backend-changes.md](docs/backend-changes.md).
 
 ## Running it
 

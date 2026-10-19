@@ -12,3 +12,6 @@ slurm-*.out
 test.txt
 .venv/
 .pytest_cache/
+
+# Filled-in site config (copied from repo/site.example.json)
+repo/site.json

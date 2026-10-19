@@ -34,8 +34,8 @@ build: ## Byte-compile the app and backend (catches syntax errors)
 test: ## Run all tests
 	$(PY) -m pytest -q tests
 
-run: ## Run the web app locally on PORT (site settings from ADVQM_SITE_CONFIG)
-	$(VENV)/bin/voila --port=$(PORT) --no-browser --autoreload=False \
+run: ## Run the web app on 127.0.0.1:PORT (site settings from ADVQM_SITE_CONFIG)
+	$(VENV)/bin/voila --port=$(PORT) --Voila.ip=127.0.0.1 --no-browser --autoreload=False \
 	  --VoilaConfiguration.enable_nbextensions=True \
 	  "--Voila.tornado_settings={'websocket_ping_interval': 20}" \
 	  "--VoilaConfiguration.file_whitelist=['.*\\.(png|jpg|gif|svg)', 'downloads/qe_output_files_[0-9a-f]{32}\\.zip', 'downloads/run_logs_[0-9a-f]{32}\\.zip']" \
@@ -54,7 +54,7 @@ version: ## Print the version a build would carry
 # --- Docker (our cluster): the app runs in a container on own3 ---------------
 
 docker-build: ## Build the app Docker image
-	docker build --build-arg VERSION=$(VERSION) -t "$(IMAGE)" .
+	docker build -t "$(IMAGE)" .
 
 # Replaces only the container; persistent workflow data stays in DATA_DIR.
 up: ## Replace the running container with one from the current image

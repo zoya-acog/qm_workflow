@@ -9,11 +9,12 @@ Web app (Voila) that turns crystal CIFs into Quantum ESPRESSO energy runs on a S
 | repo/app/ | Voila web app: app.ipynb → app_src.py; pages/ (new_run, runs, results, dashboard), shared.py, helpers.py, docs.py (in-app help) |
 | repo/advQMcalc_test/ | Backend package: CIF → QE input (cif2cell), SLURM job scripts, state.json, results. **Client-provided** |
 | repo/advQMcalc_test/src/advQMcalc_test/site_config.py | Per-cluster settings (launch mode, partitions, paths); override with `ADVQM_SITE_CONFIG=<json>` |
+| repo/site.example.json | Template a site copies to site.json (gitignored); also sets contacts shown in the app |
 | repo/advQMcalc_test/site_configs/ | Example site configs (DeltaHPC) |
 | repo/cpu/, repo/gpu/ | Dockerfiles for the QE 7.1 images used on our cluster |
 | repo/Dockerfile, repo/deploy/ | App image and own3 container restart script (our cluster only) |
 | repo/tests/ | pytest suite; tests/data/ holds real CIFs, tests/golden/ recorded job scripts |
-| docs/ | design.md (decisions), status.md (state and TODO) |
+| docs/ | vision.md, design.md (decisions), installation.md (client setup), status.md (state and TODO) |
 | data/ (gitignored) | Live runs, uploads, pseudopotentials, image tars. Never commit; never delete |
 
 ## Rules

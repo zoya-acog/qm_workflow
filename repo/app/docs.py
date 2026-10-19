@@ -1,6 +1,29 @@
 """Dashboard documentation content and accordion helper."""
 
+import html
+
 import ipywidgets as widgets
+from advQMcalc_test.site_config import SITE
+
+# Shown under "Contact". A site sets its own in the site config:
+#   "app": {"contact": [{"name": "Dr. A", "email": "a@example.com"}]}
+# An empty list hides the Contact section.
+_DEFAULT_CONTACTS = [
+    {"name": "Dr. Rahul Nikhar", "email": "Rahul.Nikhar@pfizer.com"},
+    {"name": "Dr. Krishnanjan Pramanik", "email": "pkrishnanjan@aganitha.ai"},
+]
+
+
+def _contact_html(contacts: list[dict]) -> str:
+    if not contacts:
+        return ""
+    people = [
+        f'{html.escape(c["name"])} at <a href="mailto:{html.escape(c["email"])}">{html.escape(c["email"])}</a>'
+        for c in contacts
+    ]
+    joined = people[0] if len(people) == 1 else ", ".join(people[:-1]) + " and " + people[-1]
+    return (f"<p><b>Contact</b></p>\n<p>Reach out to {joined} for questions related "
+            "to the application.</p>\n")
 
 _DOC_DESCRIPTION_HTML = """
 <p>This application is an automated workflow driver designed to process crystal structures from
@@ -95,13 +118,10 @@ _DOC_REFERENCES_HTML = """
 <li>(For GPU enabled Versions) <a href="https://doi.org/10.1063/5.0005082" target="_blank">J. Chem. Phys. 152, 154105 (2020)</a></li>
 <li><a href="https://www.quantum-espresso.org/Doc/INPUT_PW.html#id51" target="_blank">pw.x input description</a></li>
 </ul>
-<p><b>Contact</b></p>
-<p>Reach out to Dr. Rahul Nikhar at
-<a href="mailto:Rahul.Nikhar@pfizer.com">Rahul.Nikhar@pfizer.com</a> and
-Dr. Krishnanjan Pramanik at
-<a href="mailto:pkrishnanjan@aganitha.ai">pkrishnanjan@aganitha.ai</a> for questions related
-to the application.</p>
 """
+
+
+_DOC_REFERENCES_HTML += _contact_html(SITE.get("app", {}).get("contact", _DEFAULT_CONTACTS))
 
 
 def _doc_accordion(title: str, body_html: str) -> widgets.Accordion:

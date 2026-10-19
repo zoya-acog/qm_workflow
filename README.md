@@ -19,13 +19,6 @@ The map of the code is in [AGENTS.md](AGENTS.md); decisions are in [docs/design.
 
 ## Running it
 
-**Another cluster (no Docker):** copy `repo/advQMcalc_test/site_configs/deltahpc.example.json`, fill in partitions, modules and paths, then:
+**Another cluster (no Docker):** follow [docs/installation.md](docs/installation.md): `make install`, copy `repo/site.example.json` to `site.json` and fill it in, then `ADVQM_SITE_CONFIG=$PWD/site.json make run`. The machine running the app must be able to run `sbatch`/`squeue` and see the runs and pseudopotential folders.
 
-```bash
-cd repo && make install
-ADVQM_SITE_CONFIG=/path/to/site.json make run
-```
-
-The host running the app must be able to run `sbatch`/`squeue` and see the runs and pseudopotential folders.
-
-**Our cluster (own3, Docker):** `cd repo && make rebuild` builds the image and replaces the `advqm-voila` container. QE runs in the `advqm-qe-cpu:7.1` / `advqm-qe-gpu:7.1` images; `make help` lists every target.
+**Our cluster (own3, Docker):** `cd repo && make rebuild` builds the image and replaces the `advqm-voila` container. QE runs in the `advqm-qe-cpu:7.1` / `advqm-qe-gpu:7.1` images; `make help` lists every target; the image alone is `make docker-build`.

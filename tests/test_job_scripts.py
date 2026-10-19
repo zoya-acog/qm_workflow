@@ -16,7 +16,7 @@ from advQMcalc_test.run_context import RunContext
 from advQMcalc_test.site_config import load_site_config
 from conftest import REPO
 
-GOLDEN = Path(__file__).resolve().parent / "golden"
+EXPECTED = Path(__file__).resolve().parent / "expected"
 DELTAHPC = REPO / "advQMcalc_test" / "site_configs" / "deltahpc.example.yaml"
 EXAMPLE = REPO / "config.example.yaml"
 
@@ -33,12 +33,26 @@ def _script(tmp_path, monkeypatch, site_file=None, **kwargs) -> str:
 
 
 @pytest.mark.parametrize("name, kwargs", [
-    ("own_cpu", {}),
-    ("own_gpu", {"gpu": True}),
+    ("reference_cpu", {}),
+    ("reference_gpu", {"gpu": True}),
 ])
-def test_our_cluster_scripts_match_recorded_output(tmp_path, monkeypatch, name, kwargs):
-    # Recorded from the scripts that ran on our cluster; review any diff before updating.
-    assert _script(tmp_path, monkeypatch, **kwargs) == (GOLDEN / f"{name}.slurm").read_text()
+def test_scripts_match_reference_output(tmp_path, monkeypatch, name, kwargs):
+    # Recorded with the DeltaHPC example config; review any difference before updating.
+    text = _script(tmp_path, monkeypatch, site_file=DELTAHPC, **kwargs)
+    assert text == (EXPECTED / f"{name}.slurm").read_text()
+
+
+def test_client_original_script_is_kept_line_for_line(tmp_path, monkeypatch):
+    # client_0.0.16.slurm was written by the client's own advQMcalc_test 0.0.16 for
+    # the same run. Every one of its lines must appear, in order, in the script this
+    # version writes for their cluster (quoting of values aside).
+    def lines(text):
+        return [line.replace('"', "") for line in text.splitlines() if line.strip()]
+
+    ours = iter(lines(_script(tmp_path, monkeypatch, site_file=DELTAHPC)))
+    missing = [line for line in lines((EXPECTED / "client_0.0.16.slurm").read_text())
+               if not any(line == candidate for candidate in ours)]
+    assert missing == []
 
 
 def test_gpu_job_runs_one_mpi_rank_per_gpu(tmp_path, monkeypatch):

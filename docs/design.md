@@ -27,7 +27,8 @@ made twice); environment variables per value (rejected: dozens of variables,
 no nesting for CPU/GPU).
 
 **Consequence:** changing the default changes every job script on our cluster;
-`tests/golden/` records the expected scripts so a change is visible.
+`tests/expected/` records the reference scripts for the DeltaHPC example, and the
+script the client's own 0.0.16 wrote; a test checks every line of that one is kept.
 
 ## How QE runs
 

@@ -1,33 +1,25 @@
 #!/bin/bash
 #SBATCH --job-name=X.scf
 #SBATCH --output=RUNDIR/jobs/crystal/X.scf.slurm.out
-#SBATCH --partition=pgpu
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:1
-#SBATCH --exclude=own3,own5,own10
-#SBATCH --cpus-per-task=4
-#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --ntasks=8
 #SBATCH --mem-per-cpu=4G
 #SBATCH --time=2:00:00
 
 set -e
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
-IMG="advqm-qe-gpu:7.1"
-# Load the image on this node once (flock: one loader per node).
-if ! docker image inspect "$IMG" >/dev/null 2>&1; then
-    flock /tmp/advqm_docker_load.lock sh -c 'docker image inspect advqm-qe-gpu:7.1 >/dev/null 2>&1 || docker load -i /mnt/own6d/qe_workflow/data/gpu-build/advqm-qe-gpu-7.1.tar'
-fi
-# ponytail: retain the existing cluster-specific QE executable and
-# paths; ceiling: the UI's qe_command field is ignored here. Upgrade
-# by parameterizing this script with a validated qe_command value.
+module load medsci
+module load quantum-espresso/7.1
 PW_BIN=pw.x
 
 infile=$(basename "X.scf.in" .in)
 indir="RUNDIR/inputs/crystal"
-workdir="$indir/work_$SLURM_JOBID"
+workdir="/hpfs/userws/$USER/workdir/$SLURM_JOBID"
 
 mkdir -p "$workdir" && cd "$workdir" && echo "$workdir"
+trap 'cp "$workdir/$infile.out" "$indir/" 2>/dev/null || true' EXIT
 cp -r "$indir/$infile.in" "$workdir"
 
 # QE's scratch/coordination files (*.save/, pwscf.para,
@@ -41,7 +33,7 @@ cp -r "$indir/$infile.in" "$workdir"
 # instead — only the small .out file (captured via the stdout
 # redirect below) needs to survive, we don't use
 # restart-from-checkpoint anywhere in this pipeline.
-localscratch="/tmp/qe_scratch_$SLURM_JOBID"
+localscratch="/hpfs/userws/$USER/workdir/$SLURM_JOBID/tmp"
 mkdir -p "$localscratch"
 if grep -q "outdir" "$infile.in"; then
     sed -i "s#^\s*outdir.*#  outdir = '$localscratch'#" "$infile.in"
@@ -90,12 +82,6 @@ if grep -qE "calculation = '(vc-)?relax'" "$infile.in" && ! grep -q "&IONS" "$in
     ' "$infile.in" > "$infile.in.tmp" && mv "$infile.in.tmp" "$infile.in"
 fi
 
-docker run --rm --device nvidia.com/gpu=all \
-    --label user="$(id -un)" \
-    --label description="advQMcalc_test QE GPU job ($SLURM_JOB_NAME)" \
-    --user "$(id -u):$(id -g)" -e HOME=/tmp -e OMP_NUM_THREADS \
-    -v /mnt/own6d/qe_workflow/data:/mnt/own6d/qe_workflow/data -v "$localscratch:$localscratch" \
-    -w "$workdir" "$IMG" \
-    mpirun -np 1 pw.x -nk 1 -i "$infile.in" > "$infile.out"
+srun pw.x -i "$infile.in" > "$infile.out"
 rm -rf "$localscratch"
 cp "$infile.out" "$indir"

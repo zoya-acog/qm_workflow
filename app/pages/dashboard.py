@@ -89,3 +89,6 @@ def _build_dashboard_page(nav: _Nav):
     render()
     return widgets.VBox([header, widgets.HBox([new_run_btn, refresh_btn]), stats_out, recent_out])
 
+
+
+# © 2017-26. Aganitha Cognitive Solutions Private Limited. Proprietary and Confidential.

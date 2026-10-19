@@ -120,3 +120,6 @@ def app(app_mode: bool = True, debug: bool = False):
 
     my_app.content.children = [docs, shell]
     return my_app
+
+
+# © 2017-26. Aganitha Cognitive Solutions Private Limited. Proprietary and Confidential.

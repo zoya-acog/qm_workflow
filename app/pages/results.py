@@ -815,3 +815,6 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
     return widgets.VBox([header, comparison_card])
 
 
+
+
+# © 2017-26. Aganitha Cognitive Solutions Private Limited. Proprietary and Confidential.

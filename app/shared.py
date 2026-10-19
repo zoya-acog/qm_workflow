@@ -498,3 +498,6 @@ CALC_TYPE_LABELS = {
     "relax": "Fixed Cell Optimization",
     "vc-relax": "Variable Cell Optimization",
 }
+
+
+# © 2017-26. Aganitha Cognitive Solutions Private Limited. Proprietary and Confidential.

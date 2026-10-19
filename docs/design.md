@@ -5,7 +5,7 @@ open work are in [status.md](status.md).
 
 ## Shape
 
-A Voila app (`repo/app`) drives a backend package (`repo/advQMcalc_test`).
+A Voila app (`app/`) drives a backend package (`advQMcalc_test/`).
 The app collects settings, calls the backend in-process to stage the CIF, run
 cif2cell, write the QE input and a SLURM job script, and submit it. Each run
 is a folder with `state.json`, inputs, job script, QE output and results. The
@@ -33,7 +33,7 @@ no nesting for CPU/GPU).
 
 | Site | Mode | Why |
 |---|---|---|
-| Our cluster | `docker`: `mpirun` inside `advqm-qe-cpu:7.1` / `advqm-qe-gpu:7.1` | DevOps allows only containers; plain `srun pw.x` gave uncoordinated copies; `srun --mpi=pmix` hung |
+| Developers' cluster | `docker`: `mpirun` inside `advqm-qe-cpu:7.1` / `advqm-qe-gpu:7.1` | DevOps allows only containers; plain `srun pw.x` gave uncoordinated copies; `srun --mpi=pmix` hung |
 | DeltaHPC (client) | `module`: `module load quantum-espresso/7.1`, `srun pw.x` | QE is installed there; their own scripts use srun |
 
 **QE 7.1 everywhere** to match the client. Benzene + DFT-D3 scf gives

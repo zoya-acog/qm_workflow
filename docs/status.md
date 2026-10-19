@@ -15,4 +15,3 @@
 - Multi-node runs: node count is fixed at 1.
 - The New Run "QE command" field is ignored (QE comes from the site config).
 - `skills-pack.lock.json`: add once `atk` / `skills-pack` is installed.
-- Our cluster: own5 (Docker GPU device error), own10 (no docker access) and own3 (GTX 1080 Ti) are excluded from GPU jobs.

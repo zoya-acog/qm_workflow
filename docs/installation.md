@@ -37,10 +37,9 @@ srun -N1 -n1 bash -lc 'module load quantum-espresso/7.1 && which pw.x'
 
 ## 2. Install the software
 
-From a copy of this repository on shared storage:
+From a copy of this repository on shared storage, in its top folder:
 
 ```bash
-cd repo
 make install               # .venv with the app, backend, pymatgen, cif2cell, tests
 ```
 

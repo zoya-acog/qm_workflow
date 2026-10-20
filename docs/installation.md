@@ -15,6 +15,14 @@ itself is **not** installed here: jobs use your cluster's QE (e.g.
 | Web app, CIF → QE input (cif2cell), job script, `sbatch` | the machine serving the app |
 | `pw.x` (the calculation) | a compute node, through SLURM |
 
+The Python environment is needed **only on the machine serving the app**. Job
+scripts run `pw.x` from your QE module and use no Python, so compute nodes
+need nothing from this installation.
+
+**No SLURM token is needed.** The app submits and monitors jobs with `sbatch`,
+`squeue` and `sacct`, as the `advQMcalc_test` command line does, so it runs on
+a SLURM login node (or any host where those commands work).
+
 ---
 
 ## 1. Prerequisites
@@ -44,13 +52,20 @@ make install               # .venv with the app, backend, pymatgen, cif2cell, te
 ```
 
 `make install` also registers the widget front-ends (ipyvuetify,
-ipywidgets) in the environment. Without them every page fails with
-"Script error for jupyter-vue".
+ipywidgets) and the Jupyter kernel `python3` in the environment. Without the
+widgets every page fails with "Script error for jupyter-vue"; without the
+kernel the app does not start.
+
+> **The UI package versions are coupled.** ipyvuetify 1.8 needs the
+> notebook 6 / ipywidgets 7 stack pinned in `requirements.txt`. Newer
+> notebook or ipywidgets versions install cleanly and then show an empty page,
+> so do not upgrade them separately.
 
 ### Check
 
 ```bash
 .venv/bin/jupyter nbextension list 2>&1 | grep -E "ipyvuetify|widgets" # both 'enabled OK'
+.venv/bin/jupyter kernelspec list | grep python3
 .venv/bin/python -c "import pymatgen, advQMcalc_test; print('ok')"
 which cif2cell || ls .venv/bin/cif2cell
 make test                  # no QE or SLURM needed
@@ -65,8 +80,27 @@ make test                  # no QE or SLURM needed
 | `app.upload_dir` | CIFs uploaded through the browser | no |
 | `workdir` | where QE runs during a job (scratch) | compute node only |
 
-The pseudopotential folder must exist and contain a `.UPF` file for every
-element you will run; the app matches files to elements automatically.
+### Pseudopotentials
+
+Put your pseudopotential folder on shared storage that both the app machine
+and the compute nodes see at the same path (for example next to the runs
+folder), and set that path as `pseudo_dir` in `config.yaml`. Files are read in
+place, not copied into runs; a symlinked folder must resolve to the same real
+path on the compute nodes. No pseudopotentials are shipped with the app.
+
+The app picks one file per element automatically:
+
+- the file name starts with the element symbol followed by `.` or `_`
+  (any case) and ends in `.UPF` or `.upf`, e.g. `C_pbe_v1.2.uspp.F.UPF`,
+  `H.pbe-rrkjus_psl.1.0.0.UPF`;
+- the folder holds **exactly one** file per element; with two candidates the
+  run stops and asks you to choose;
+- keep one functional per folder (e.g. all PBE): QE takes the functional from
+  the files;
+- the XDM dispersion correction needs norm-conserving or PAW files, not
+  ultrasoft ones; use Grimme-D3 with ultrasoft sets.
+
+The verification run in step 6 needs files for **C** and **H**.
 
 ### Check
 
@@ -114,8 +148,15 @@ make run                                     # http://127.0.0.1:8866
 ```
 
 The app listens on 127.0.0.1 only. From your desktop, forward the port:
-`ssh -L 8866:127.0.0.1:8866 <app-host>`, then open http://localhost:8866.
+`ssh -N -L 8866:127.0.0.1:8866 <app-host>`, then open http://localhost:8866.
 Change the port with `make run PORT=8900`.
+
+`make run` stays in the foreground and stops when the terminal closes; run it
+under `tmux` or `screen`, or as a systemd user service, to keep it up.
+
+The app has **no login of its own**: the "User Name" field labels runs, it
+does not identify users. To publish it beyond your workstation, put it behind
+your own authenticating proxy.
 
 ### Check
 
@@ -136,18 +177,45 @@ On the command line, the job script is in
 
 ## 7. When it goes wrong
 
-| Symptom | Likely cause |
-|---|---|
-| Every page shows "Script error for jupyter-vue" | widget extensions not registered: rerun `make install` |
-| Submit Run fails with "sbatch not found" | the app machine has no SLURM client, or it is not on `PATH` when the app starts |
-| Job FAILED at once; `.slurm.out` says `pw.x: command not found` | `modules` in `config.yaml` does not provide `pw.x` |
-| Job fails reading pseudopotentials | `pseudo_dir` not visible from compute nodes, or a missing element `.UPF` |
-| Status shows **ENDED** instead of COMPLETED | SLURM accounting (`sacct`) is unavailable; the job left the queue. Check its `.out` file |
-| Results show "–" for relative energy | the selected runs are different compounds, or one CIF could not be read |
+The Runs page shows the error of a failed run, and its download button gives
+the workflow log and the QE output. Setup problems (modules, partition,
+scratch) are in the SLURM job log,
+`<runs_dir>/<run>/jobs/crystal/<name>.slurm.out`, next to the job script.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Every page shows "Script error for jupyter-vue" | widget extensions not registered | rerun `make install` |
+| The app does not start; no kernel `python3` | kernel not registered | rerun `make install`; check `jupyter kernelspec list` |
+| Empty page after upgrading packages | UI versions no longer match | reinstall from `requirements.txt` (step 2) |
+| Submit Run fails with "sbatch not found" | the app machine has no SLURM client, or it is not on `PATH` | start the app on a login node, from a shell where `sbatch` works |
+| Job FAILED at once; `.slurm.out` says `pw.x: command not found` | `modules` does not provide `pw.x` | fix `modules` in `config.yaml`; test with `module load …; which pw.x` |
+| "No pseudopotential found for element 'X'" | no file named `X.…` or `X_….UPF` in `pseudo_dir` | add the file (step 3) |
+| "Multiple pseudopotentials found for element 'X'" | two candidate files for one element | keep one per element in that folder |
+| Job fails reading pseudopotentials | `pseudo_dir` not visible from compute nodes | move it to shared storage (step 3) |
+| "cif2cell failed" | the CIF could not be converted | check the CIF in a viewer; partial occupancies and missing cell data are the usual causes |
+| Relax / vc-relax ends without converging | the 100-step limit was reached | download the output structure (Results) and start a new run from it |
+| Status shows **ENDED** instead of COMPLETED | SLURM accounting (`sacct`) unavailable; the job left the queue | open the run's results; the output is collected if QE finished |
+| Results show "–" for relative energy | the selected runs are different compounds, or one CIF could not be read | select runs of one compound |
 
 ## Appendix: what gets installed
 
-`requirements.txt` lists it: Voila 0.4 with the notebook-6 / ipywidgets-7
-widget stack (ipyvuetify needs it), pandas and matplotlib for tables and
-plots, cif2cell (CIF → QE input), pymatgen (molecule detection for Z), the
-`advQMcalc_test` backend, and pytest.
+Everything comes from `requirements.txt` into `.venv`; QE comes from your cluster.
+
+| Package | Version | Purpose |
+|---|---|---|
+| voila | `>=0.4,<0.5` | serves the app |
+| notebook | `==6.5.4` | UI stack (coupled, see step 2) |
+| ipywidgets · widgetsnbextension · jupyterlab_widgets | `7.6.5` · `3.5.2` · `1.1.4` | UI stack |
+| ipyvuetify · ipyvue | `1.8.10` · `>=1.9,<2` | UI components |
+| ipykernel | latest | Jupyter kernel for the app |
+| pandas · matplotlib | latest · `>=3.9,<4` | results tables, plots |
+| cif2cell | latest | CIF → QE input |
+| pymatgen | `>=2024.1` | molecules per cell (Z) |
+| pyyaml | latest | reads `config.yaml` |
+| advQMcalc_test | 0.0.18 (this repo) | backend |
+| pytest | latest | `make test` |
+
+From your cluster: Python 3.10 or newer, SLURM client commands on the app
+machine, and Quantum ESPRESSO 7.1 (`pw.x`) on the compute nodes, GPU-enabled
+for GPU runs.
+

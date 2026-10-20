@@ -11,7 +11,7 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-install: ## Create .venv and install the app, backend and test dependencies
+install: ## Create .venv, install the app, backend and test dependencies, register widgets and kernel
 	python3 -m venv $(VENV)
 	$(PY) -m pip install -q --upgrade pip
 	$(PY) -m pip install -q -r requirements.txt
@@ -19,6 +19,7 @@ install: ## Create .venv and install the app, backend and test dependencies
 	$(VENV)/bin/jupyter nbextension enable --sys-prefix --py ipyvuetify >/dev/null
 	$(VENV)/bin/jupyter nbextension install --sys-prefix --py widgetsnbextension --overwrite >/dev/null
 	$(VENV)/bin/jupyter nbextension enable --sys-prefix --py widgetsnbextension >/dev/null
+	$(PY) -m ipykernel install --sys-prefix --name python3 --display-name "Python 3" >/dev/null
 
 skills-install: ## Restore project skills from skills-pack.lock.json
 	skills-pack update; skills-pack upgrade

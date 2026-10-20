@@ -30,6 +30,28 @@ make run
 
 The machine running the app must be able to run `sbatch`/`squeue` and see the runs and pseudopotential folders at the same paths as the compute nodes. QE comes from your cluster (e.g. `module load quantum-espresso/7.1`); there is no container in this distribution.
 
+## Command line
+
+The backend works without the app, as in earlier versions of `advQMcalc_test`.
+Run it from the installed environment with the same configuration file:
+
+```bash
+export ADVQM_SITE_CONFIG=$PWD/config.yaml
+
+# one structure, CPU
+.venv/bin/advQMcalc_test --cif benzene.cif --calc-type scf \
+    --pseudo-dir /shared/qe_workflow/pseudos --runs-dir /shared/qe_workflow/runs \
+    --vdw-corr DFT-D3 --slurm-ntasks 8
+
+# a folder of structures as one SLURM array job, at most 10 running at once
+.venv/bin/advQMcalc_test --cif-dir ./polymorphs --calc-type vc-relax --array --array-max-concurrent 10 ...
+
+# on GPU
+.venv/bin/advQMcalc_test --cif benzene.cif --gpu --gpus 1 ...
+```
+
+To update a run's status and collect its results, run `advQMcalc_test --resume --run-path <run> --cif <its CIF>`; `advQMcalc_test --help` lists every option. Changes from the version you shared are in [docs/backend-changes.md](docs/backend-changes.md).
+
 ## Directory structure
 
 ```

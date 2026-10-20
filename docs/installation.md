@@ -64,7 +64,7 @@ kernel the app does not start.
 ### Check
 
 ```bash
-.venv/bin/jupyter nbextension list 2>&1 | grep -E "ipyvuetify|widgets" # both 'enabled OK'
+.venv/bin/jupyter nbextension list 2>&1 | grep -E "jupyter-vuetify|jupyter-js-widgets"   # both 'enabled'
 .venv/bin/jupyter kernelspec list | grep python3
 .venv/bin/python -c "import pymatgen, advQMcalc_test; print('ok')"
 which cif2cell || ls .venv/bin/cif2cell

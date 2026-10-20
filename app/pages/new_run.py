@@ -282,8 +282,8 @@ def _build_new_run_page(nav: _Nav):
                 return
             multi = False
         else:
-            # ponytail: accept any server-readable folder path; ceiling: this
-            # is not sandboxed to a data root. Upgrade by adding a path allowlist.
+            # Any folder readable by the server is accepted; access is not
+            # restricted to a data root.
             cif_dir_text = (multi_cif_dir_w.v_model or "").strip()
             if not cif_dir_text:
                 _run_log("Enter a server-side folder path for Multiple CIF Files.")

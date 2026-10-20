@@ -387,8 +387,8 @@ def _csv_link_html(columns: list[str], rows: list[list[str]], suffix: str) -> st
     writer = csv.writer(buf)
     writer.writerow(columns)
     writer.writerows(rows)
-    # ponytail: embed CSV bytes in a data URI; ceiling: very large
-    # selections may exceed browser URL limits. Upgrade to a download route.
+    # The CSV is embedded in a data URI; very large selections may exceed
+    # browser URL limits.
     payload = base64.b64encode(buf.getvalue().encode("utf-8")).decode("ascii")
     return (
         '<a class="advqm-csv-download" '
@@ -707,8 +707,8 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
         comparison_note.value = ""
         comparison_table.children = [widgets.HTML(loading_html(f"Loading results for {len(rows)} run(s)…"))]
 
-        # ponytail: normalize each QE cell to formula units before comparison;
-        # ceiling: complex/disordered formulas may not parse, so show no ΔE.
+        # Energies are compared per formula unit; formulas that cannot be
+        # parsed show no ΔE.
         row_data = []
         for row in rows:
             metadata = _cif_result_metadata(row)

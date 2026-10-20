@@ -368,21 +368,8 @@ def _fmt(v) -> str:
 
 
 def _list_all_run_rows(base: Path, only_successful: bool = False) -> list[dict]:
-    """List every run under base — not just the latest.
-
-    cli.py's own _aggregate_crystal_results (via _iter_per_cif_runs) has a
-    "single-cif runs_dir" heuristic: if every child directory looks like a
-    timestamp, it assumes the whole runs_dir represents one CIF's run
-    history and returns only the single latest one, discarding every other
-    run. That matches a different intended layout (runs_dir per CIF) but not
-    how this app actually uses DEFAULT_RUNS_DIR — one shared flat folder for
-    every run of every CIF ever submitted — so in practice it was silently
-    hiding every run except the most recent system-wide. This frontend-only
-    replacement (no cli.py change) walks every directory that directly
-    contains a state.json, with no collapsing, keeping the exact same row
-    shape _aggregate_crystal_results produced so every existing consumer
-    (Runs, Results) keeps working unchanged.
-    """
+    """All runs under base: every directory that contains a state.json, as the
+    rows used by the Runs and Results pages."""
     rows: list[dict] = []
     if not base.is_dir():
         return rows
@@ -425,19 +412,8 @@ def _list_all_run_rows(base: Path, only_successful: bool = False) -> list[dict]:
 
 
 def _effective_status_html(r: dict) -> str:
-    """Status badge, distinguishing a genuine SCF non-convergence from a
-    generic failure. QE reports this in the .out text as "convergence NOT
-    achieved" — the backend's status field lumps it into the same generic
-    "failed" bucket as everything else (qe_failed_validation), so this
-    frontend-only check re-inspects the actual output for the specific
-    marker rather than needing a cli.py change to add a new status value.
-
-    QE has a hard default limit on SCF steps (electron_maxstep); a run that
-    hits it isn't necessarily wrong, it may just need more iterations — for
-    now this is surfaced as a distinct status so it's not confused with a
-    real error, but resubmitting with a higher step count or extending from
-    the last SCF step isn't wired up in the UI yet.
-    """
+    """Status badge; reports SCF non-convergence ("convergence NOT achieved" in
+    the QE output) separately from other failures."""
     status = r.get("crystal_status")
     if not r.get("job_id") and status_category(status) in ("warning", "neutral"):
         # No SLURM job was ever submitted for this run — if its log records

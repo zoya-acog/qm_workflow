@@ -315,9 +315,8 @@ def _build_runs_page(nav: _Nav):
 
     current_rows = []
 
-    # ── Monitor / Resume — the run in focus is picked by clicking a row's
-    # wrench icon (see on_open below), not a separate dropdown; this label
-    # just reflects whatever's currently selected. ──────────────────────────
+    # ── Monitor: the run in focus is chosen with a row's wrench icon
+    # (see on_open below). ──────────────────────────────────────────────────
     selected_run = {"path": None, "paths": [], "label": None}
     selected_label_w = widgets.HTML('<span class="advqm-muted">No run selected — click the ⚙ icon on a run above.</span>')
     job_status = widgets.Label(value="")
@@ -693,13 +692,8 @@ def _build_runs_page(nav: _Nav):
         render_rows()
 
     def _resolve_one_stale(r: dict, base: Path) -> None:
-        # Re-runs the same resume/monitor logic as clicking the ⚙ icon's
-        # Resume button, but silently in the background — the pipeline only
-        # ever checks SLURM status once, synchronously, right after submit
-        # (cli.py's _process_single_cif, TASK 6), so anything still
-        # Pending/Running in state.json may just never have been looked at
-        # again. This re-checks it for real instead of trusting a stale
-        # snapshot.
+        # Re-checks the SLURM status of unfinished runs in the background; the
+        # stored status is only updated when a run is checked.
         rp = Path(r["run_path"]) if r.get("run_path") else None
         if rp is None:
             return

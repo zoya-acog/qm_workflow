@@ -28,7 +28,7 @@ cp config.example.yaml config.yaml        # fill in modules, partitions, paths
 make run
 ```
 
-The machine running the app must be able to run `sbatch`/`squeue` and see the runs and pseudopotential folders at the same paths as the compute nodes. QE comes from your cluster (e.g. `module load quantum-espresso/7.1`); there is no container in this distribution.
+The machine running the app must be able to run `sbatch`/`squeue` and see the runs and pseudopotential folders at the same paths as the compute nodes. QE comes from your cluster (e.g. `module load quantum-espresso/7.1`).
 
 ## Command line
 

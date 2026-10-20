@@ -34,18 +34,15 @@ script the client's own 0.0.16 wrote; a test checks every line of that one is ke
 
 ## How QE runs
 
-| Site | Mode | Why |
-|---|---|---|
-| Developers' cluster | `docker`: `mpirun` inside `advqm-qe-cpu:7.1` / `advqm-qe-gpu:7.1` | DevOps allows only containers; plain `srun pw.x` gave uncoordinated copies; `srun --mpi=pmix` hung |
-| DeltaHPC (client) | `module`: `module load quantum-espresso/7.1`, `srun pw.x` | QE is installed there; their own scripts use srun |
+Jobs load QE from the cluster's module system and start it with SLURM:
+`module load quantum-espresso/7.1`, then `srun pw.x`, as the client's own
+advQMcalc_test 0.0.16 scripts do. The modules, the launcher (`srun` or
+`mpirun`) and the scratch directory are settings in `config.yaml`.
 
-**QE 7.1 everywhere** to match the client. Benzene + DFT-D3 scf gives
-−302.98707889 Ry on 7.1 CPU, 7.1 GPU and 7.2 CPU alike, so results are
-comparable. GPU jobs run one MPI rank per GPU with `-nk <GPUs>`.
-
-Our GPU image is built for RTX 4090 (cc89) and RTX 5080 (cc120); NVIDIA's
-prebuilt QE images lack those. A build for other GPUs sets a different
-architecture list.
+**QE 7.1** matches the client cluster. Benzene + DFT-D3 scf gives
+−302.98707889 Ry on QE 7.1 (CPU and GPU) and 7.2 alike, so results are
+comparable across these versions. GPU jobs run one MPI rank per GPU with
+`-nk <GPUs>`.
 
 ## Z and relative energy
 

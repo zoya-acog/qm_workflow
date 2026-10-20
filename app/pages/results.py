@@ -263,7 +263,7 @@ def _trajectory_link_html(rows: list[dict], suffix: str) -> str:
 
 
 # QE output zips are written here and served by Voila at voila/files/downloads/...
-# (Voila's root is this app folder; the Dockerfile allows exactly these names via
+# (Voila's root is this app folder; `make run` allows exactly these names via
 # --VoilaConfiguration.file_whitelist). Files are temporary handoffs to the browser.
 _DOWNLOAD_DIR = Path(__file__).resolve().parent.parent / "downloads"
 _DOWNLOAD_MAX_AGE_S = 3600

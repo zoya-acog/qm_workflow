@@ -78,7 +78,7 @@ def _cif_cell_text(names: list[str]) -> str:
 
 
 # Log zips are served by Voila at voila/files/downloads/run_logs_<hex>.zip (the
-# Dockerfile's file_whitelist allows exactly these names); temporary, cleaned after 1 h.
+# file_whitelist in `make run` allows exactly these names); temporary, cleaned after 1 h.
 _LOG_DIR = Path(__file__).resolve().parent.parent / "downloads"
 
 
@@ -130,7 +130,7 @@ def _run_logs_zip(rows: list[dict]) -> Path | None:
 
 def _run_error_text(run_path: Path, crystal: dict, max_lines: int = 3) -> str | None:
     """The actual error of a failed run, in up to 3 lines: QE's own error block
-    from the .out, else error lines from the SLURM job log (Docker/MPI/node)."""
+    from the .out, else error lines from the SLURM job log (MPI/node)."""
     lines: list[str] = []
     out = _run_qe_out(run_path)
     if out:

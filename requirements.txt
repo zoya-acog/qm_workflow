@@ -1,6 +1,6 @@
-# Web app + backend dependencies for running without Docker (make install).
-# Versions match the Docker image (Dockerfile): ipyvuetify needs the classic
-# notebook-6 / ipywidgets-7 stack, not voila 0.5 / ipywidgets 8.
+# Web app + backend dependencies (make install).
+# ipyvuetify needs the classic notebook-6 / ipywidgets-7 stack, not voila 0.5 /
+# ipywidgets 8; keep these versions together.
 voila>=0.4,<0.5
 notebook==6.5.4
 ipywidgets==7.6.5

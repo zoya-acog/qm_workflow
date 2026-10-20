@@ -1,7 +1,7 @@
 # Installing and running on your own cluster
 
-The setup path for a site that runs the app directly on its own machines, with
-no Docker and no root. Each step ends with a check you can run; most ways this
+The setup path for a site that runs the app directly on its own machines,
+without administrator rights. Each step ends with a check you can run; most ways this
 goes wrong are quiet (a run that never starts, a Results page with no energy),
 so run the check before moving on.
 
@@ -160,7 +160,7 @@ Pseudopotential Directory field shows your `pseudo_dir`.
 
 On the command line, the job script is in
 `<runs_dir>/<run>/jobs/crystal/*.slurm`: it should contain your
-`module load` lines and `srun pw.x`, and no `docker`.
+`module load` lines and `srun pw.x`.
 
 ## 7. When it goes wrong
 

@@ -59,6 +59,6 @@ To update a run's status and collect its results, run `advQMcalc_test --resume -
 ├── requirements.txt · config.example.yaml  Python dependencies · configuration template
 ├── app/                                  Voila web app (app.ipynb → app_src.py, pages/)
 ├── advQMcalc_test/                       backend: CIF → QE input, SLURM jobs, results
-├── tests/                                pytest suite, sample CIFs, recorded job scripts
+├── tests/ · pytest.ini                   test_backend.py, reference job scripts
 └── docs/                                 installation · vision · design · status
 ```

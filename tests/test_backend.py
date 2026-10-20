@@ -1,23 +1,34 @@
-"""SLURM job scripts generated for a run, per site config.
+"""Tests for what the app produces for a run, without QE or SLURM.
 
-Entered through RunContext.write_crystal_slurm_script, the call the CLI makes
-for every run. The CLI around it also needs cif2cell and sbatch, so the tests
-start one step inside it. The site config is swapped the way a site does it:
-by loading its config file.
+- Job scripts: written by RunContext.write_crystal_slurm_script, the call the
+  CLI makes for every run, for the site described by a config file.
+- QE input: the details the workflow adds to cif2cell's output.
+- The web app's modules import, so a broken install fails here, not in the browser.
+
+The CLI around these also runs cif2cell and sbatch, so the tests start one
+step inside it.
 """
 
+import importlib
+import re
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from advQMcalc_test import run_context
+from advQMcalc_test.cli import _compute_kpoints_from_cif, _ensure_qe_required_sections
 from advQMcalc_test.run_context import RunContext
 from advQMcalc_test.site_config import load_site_config
-from conftest import REPO
+
+REPO = Path(__file__).resolve().parents[1]
+EXAMPLE = REPO / "config.example.yaml"  # pre-filled for DeltaHPC
+SAMPLE_CIF = REPO / "app" / "samples" / "benzene.cif"  # COD 4501704, the Try Sample structure
+
+
+# ─── Job scripts and site configuration ──────────────────────────────────────
 
 EXPECTED = Path(__file__).resolve().parent / "expected"
-EXAMPLE = REPO / "config.example.yaml"  # pre-filled for DeltaHPC
 
 
 def _script(tmp_path, monkeypatch, site_file=None, **kwargs) -> str:
@@ -107,3 +118,44 @@ def test_json_config_still_accepted(tmp_path):
     site = tmp_path / "site.json"
     site.write_text('{"launch_mode": "module", "modules": ["qe/7.1"]}')
     assert load_site_config(site)["modules"] == ["qe/7.1"]
+
+
+# ─── QE input ────────────────────────────────────────────────────────────────
+
+CIF2CELL_LIKE = """&CONTROL
+  prefix = 'benzene'
+/
+&SYSTEM
+  ibrav = 0
+  nat = 48
+/
+"""
+
+
+def _nsteps(text: str) -> list[str]:
+    return re.findall(r"(?m)^\s*nstep\s*=\s*(\S+)", text)
+
+
+def test_optimizations_get_100_ionic_steps_and_scf_gets_none():
+    for calc in ("relax", "vc-relax"):
+        assert _nsteps(_ensure_qe_required_sections(CIF2CELL_LIKE, "/p", calc, "1 1 1 0 0 0", {})) == ["100"]
+    assert _nsteps(_ensure_qe_required_sections(CIF2CELL_LIKE, "/p", "scf", "1 1 1 0 0 0", {})) == []
+
+
+def test_existing_nstep_is_replaced_not_duplicated():
+    text = CIF2CELL_LIKE.replace("  prefix", "  nstep = 20\n  prefix")
+    assert _nsteps(_ensure_qe_required_sections(text, "/p", "relax", "1 1 1 0 0 0", {})) == ["100"]
+
+
+def test_kpoint_grid_from_cell_lengths_and_spacing():
+    # Benzene (COD 4501704) a, b, c = 5.522, 5.4396, 7.6726 A. n = round(1 / (length * spacing)):
+    # spacing 0.03 -> 6.04, 6.13, 4.34 -> 6 6 4;  spacing 0.05 -> 3.62, 3.68, 2.61 -> 4 4 3.
+    assert _compute_kpoints_from_cif(SAMPLE_CIF, 0.03) == "6 6 4 0 0 0"
+    assert _compute_kpoints_from_cif(SAMPLE_CIF, 0.05) == "4 4 3 0 0 0"
+
+
+# ─── Web app ─────────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("module", ["app_src", "pages.new_run", "pages.runs", "pages.results", "pages.dashboard"])
+def test_app_modules_import(module):
+    importlib.import_module(module)

@@ -12,7 +12,9 @@ ipykernel
 pandas
 matplotlib>=3.9,<4
 cif2cell
-pymatgen>=2024.1
+# pymatgen finds the molecules per cell (Z); pinned to the versions the results were checked with.
+pymatgen==2026.9.24
+pymatgen-core==2026.10.16
 pyyaml
 -e ./advQMcalc_test
 

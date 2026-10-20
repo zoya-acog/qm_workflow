@@ -211,7 +211,7 @@ Everything comes from `requirements.txt` into `.venv`; QE comes from your cluste
 | ipykernel | latest | Jupyter kernel for the app |
 | pandas · matplotlib | latest · `>=3.9,<4` | results tables, plots |
 | cif2cell | latest | CIF → QE input |
-| pymatgen | `>=2024.1` | molecules per cell (Z) |
+| pymatgen · pymatgen-core | `==2026.9.24` · `==2026.10.16` | molecules per cell (Z); pinned to the tested versions |
 | pyyaml | latest | reads `config.yaml` |
 | advQMcalc_test | 0.0.18 (this repo) | backend |
 | pytest | latest | `make test` |

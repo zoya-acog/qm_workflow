@@ -10,7 +10,7 @@ Web app (Voila) that turns crystal CIFs into Quantum ESPRESSO energy runs on a S
 | advQMcalc_test/ | Backend package: CIF → QE input (cif2cell), SLURM job scripts, state.json, results. **Client-provided** |
 | advQMcalc_test/src/advQMcalc_test/site_config.py | Per-cluster settings (launch mode, partitions, paths); overridden by config.yaml (`make run`) or `ADVQM_SITE_CONFIG=<file>` |
 | config.example.yaml | The one site configuration file, pre-filled for DeltaHPC: copy to config.yaml (gitignored); SLURM, QE modules, paths, GPU names, contacts |
-| tests/ | pytest suite; tests/data/ holds real CIFs, tests/expected/ reference job scripts (incl. the client 0.0.16 original) |
+| tests/ | test_backend.py (job scripts, config, QE input, app imports); tests/expected/ reference job scripts incl. the client 0.0.16 original; pytest.ini sets the import paths |
 | docs/ | installation.md (setup), backend-changes.md (changes to the client backend), vision.md, design.md (decisions), status.md (state and TODO) |
 
 ## Rules

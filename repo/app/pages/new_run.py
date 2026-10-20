@@ -128,7 +128,7 @@ def _build_new_run_page(nav: _Nav):
     ecutwfc_w = ipv.TextField(label="Wavefunction Cutoff (Ry)", v_model="",
                                 placeholder="e.g. 50", outlined=True, dense=True)
     ecutrho_w = ipv.TextField(label="Charge Density Cutoff (Ry)", v_model="",
-                                outlined=True, dense=True)
+                                placeholder="e.g. 600", outlined=True, dense=True)
     # Hover text for the ⓘ icon next to a field's caption (keyed by widget id).
     field_info = {
         id(ecutwfc_w): "Plane-wave cutoff for wavefunctions (ecutwfc), e.g. 50 Ry.\n"

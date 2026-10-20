@@ -93,6 +93,7 @@ _DOC_REFERENCES_HTML = """
 <li><a href="https://doi.org/10.1088/1361-648X/aa8f79" target="_blank">J.Phys.:Condens.Matter 29, 465901 (2017)</a></li>
 <li><a href="http://iopscience.iop.org/0953-8984/21/39/395502/" target="_blank">J. Phys. Condens. Matter 21, 395502 (2009)</a></li>
 <li>(For GPU enabled Versions) <a href="https://doi.org/10.1063/5.0005082" target="_blank">J. Chem. Phys. 152, 154105 (2020)</a></li>
+<li><a href="https://pypi.org/project/cif2cell/" target="_blank">Reference for cif2cell</a></li>
 <li><a href="https://www.quantum-espresso.org/Doc/INPUT_PW.html#id51" target="_blank">pw.x input description</a></li>
 </ul>
 <p><b>Contact</b></p>

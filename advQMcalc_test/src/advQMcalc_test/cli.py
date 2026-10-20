@@ -442,20 +442,8 @@ def _validate_vdw_options(args):
 
 def _validate_gpu_options(args):
     """Return an error message if the GPU options are invalid, else None."""
-    from .run_context import CPU_IMAGE_TAR, GPU_IMAGE_TAR
-    from .site_config import SITE
-
     if args.gpu and args.gpus < 1:
         return "--gpus must be >= 1"
-    # Image archives exist only on Docker sites; module sites use the cluster's QE.
-    if SITE["launch_mode"] != "docker":
-        return None
-    if not args.gpu:
-        if not Path(CPU_IMAGE_TAR).exists():
-            return f"CPU QE image archive is missing: {CPU_IMAGE_TAR}"
-        return None
-    if not Path(GPU_IMAGE_TAR).exists():
-        return f"GPU run requested but the GPU QE image archive is missing: {GPU_IMAGE_TAR}"
     return None
 
 
@@ -692,22 +680,7 @@ def _cleanup_qe_input(qe_path, pseudo_dir, pp_map, calc_type, kpoints, system_pa
 # ============================================================
 # SLURM SUBMISSION / MONITORING
 # ============================================================
-_LEGACY_SECURITY_LABEL = re.compile(r"^[ \t]*--label security=\S+ \\\n", flags=re.MULTILINE)
-
-
-def _drop_legacy_security_label(script_path):
-    """Remove the old `--label security=...` line from a job script written
-    before 2026-10-12. The new reverse-proxy Docker policy refuses any container
-    that carries a security label, so resubmitting such a script would fail."""
-    path = Path(script_path)
-    text = path.read_text()
-    cleaned = _LEGACY_SECURITY_LABEL.sub("", text)
-    if cleaned != text:
-        _atomic_write_text(path, cleaned)
-
-
 def _submit_slurm_script(script_path):
-    _drop_legacy_security_label(script_path)
     result = subprocess.run(
         ["sbatch", script_path.name],
         cwd=script_path.parent,
@@ -779,7 +752,6 @@ def _submit_array_batch(run_dirs, base_runs_dir, max_concurrent=0):
             continue
         script = (Path(run_dir) / script_rel).resolve()
         if script.exists():
-            _drop_legacy_security_label(script)  # array tasks run this script as-is
             entries.append((run_ctx, script))
     if not entries:
         raise RuntimeError("No prepared runs to submit as an array")

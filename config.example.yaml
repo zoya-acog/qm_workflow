@@ -15,9 +15,6 @@ name: deltahpc
 
 # ─── Required ────────────────────────────────────────────────────────────────
 
-# How a job gets Quantum ESPRESSO: "module" loads your cluster's QE install.
-launch_mode: module
-
 # Modules a job loads before running pw.x. A SLURM job inherits nothing from
 # the shell that submitted it, so list everything pw.x needs.
 modules:

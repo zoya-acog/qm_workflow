@@ -17,7 +17,7 @@ and docs; the backend is changed only by agreement.
 
 ## Site config, not code, describes a cluster
 
-**Decision:** every cluster-specific value (launch mode, MPI launcher, modules,
+**Decision:** every cluster-specific value (MPI launcher, modules,
 partitions, node lists, account/QOS, scratch and app paths, GPU names) lives in
 one file, `config.yaml` (used by `make run`, or named by `ADVQM_SITE_CONFIG`).
 `site_config.py` reads it over neutral built-in defaults; `config.example.yaml`

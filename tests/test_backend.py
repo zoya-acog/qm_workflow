@@ -83,17 +83,10 @@ def test_module_site_loads_modules_and_uses_srun_in_scratch(tmp_path, monkeypatc
     assert "#SBATCH --ntasks=16" in text
 
 
-def test_docker_site_rejects_srun(tmp_path, monkeypatch, tmp_path_factory):
-    site = tmp_path_factory.mktemp("site") / "site.json"
-    site.write_text('{"launch_mode": "docker", "launcher": "srun"}')
-    with pytest.raises(ValueError, match="needs launcher 'mpirun'"):
-        _script(tmp_path, monkeypatch, site_file=site)
-
-
-def test_unknown_launch_mode_is_refused(tmp_path):
+def test_unknown_launcher_is_refused(tmp_path):
     site = tmp_path / "config.yaml"
-    site.write_text("launch_mode: podman\n")
-    with pytest.raises(ValueError, match="launch_mode"):
+    site.write_text("launcher: podman\n")
+    with pytest.raises(ValueError, match="launcher"):
         load_site_config(site)
 
 
@@ -109,14 +102,14 @@ def test_generated_scripts_are_valid_bash(tmp_path, monkeypatch, site_file, kwar
 
 def test_example_config_loads_as_a_module_site():
     site = load_site_config(EXAMPLE)
-    assert (site["launch_mode"], site["launcher"]) == ("module", "srun")
+    assert site["launcher"] == "srun"
     assert site["modules"] == ["medsci", "quantum-espresso/7.1"]
     assert site["app"]["contact"] == [{"name": "Your Name", "email": "you@example.com"}]
 
 
 def test_json_config_still_accepted(tmp_path):
     site = tmp_path / "site.json"
-    site.write_text('{"launch_mode": "module", "modules": ["qe/7.1"]}')
+    site.write_text('{"modules": ["qe/7.1"]}')
     assert load_site_config(site)["modules"] == ["qe/7.1"]
 
 

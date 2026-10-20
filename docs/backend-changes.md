@@ -71,7 +71,7 @@ overrides with a YAML file, `config.yaml` (or any file named in the
 
 | Setting | Example |
 |---|---|
-| How QE is provided | `launch_mode: module`, `modules: [medsci, quantum-espresso/7.1]` |
+| How QE is provided | `modules: [medsci, quantum-espresso/7.1]` |
 | MPI launcher | `launcher: srun` |
 | Working directory | `workdir: /hpfs/userws/$USER/workdir/$SLURM_JOBID` |
 | SLURM resources | partition, account, QOS, node list, threads per rank (empty values are omitted) |

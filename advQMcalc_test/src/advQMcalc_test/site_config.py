@@ -6,16 +6,12 @@ by the ADVQM_SITE_CONFIG environment variable; its keys override the defaults
 (nested "cpu"/"gpu" sections are merged key by key). See config.example.yaml.
 
 Keys
-  launch_mode    "docker": run QE from a Docker image (development cluster).
-                 "module": run a QE installed on the cluster, loaded with
-                 `module load` (e.g. DeltaHPC's quantum-espresso/7.1).
-  launcher       "mpirun": `mpirun -np <ranks> pw.x` (inside the image for docker).
+  launcher       "mpirun": `mpirun -np <ranks> pw.x`.
                  "srun":   `srun pw.x`; SLURM starts the MPI ranks itself.
-  modules        Modules loaded before QE runs (module mode), e.g.
+  modules        Modules a job loads to get QE (`module load`), e.g.
                  ["medsci", "quantum-espresso/7.1"].
   qe_bin         QE executable name or absolute path.
-  data_root      Directory mounted into the Docker container (docker mode).
-  workdir        Where QE runs. "$indir" is the run's input folder; any shell
+  workdir       Where QE runs. "$indir" is the run's input folder; any shell
                  variables ($USER, $SLURM_JOBID) are expanded by the job.
                  When it is outside $indir the .out file is copied back even
                  if QE fails.
@@ -24,7 +20,6 @@ Keys
   cpu, gpu       Per-kind settings:
                    partition, nodelist, exclude  (empty: line not written)
                    cpus_per_task  OpenMP threads per MPI rank
-                   image, image_tar              (docker mode only)
                    extra_sbatch   list of extra "#SBATCH ..." lines
   app            Web app defaults: upload_dir, runs_dir, pseudo_dir, and
                  gpu_types (the New Run "GPU Type" choices; each value is the
@@ -44,11 +39,9 @@ ENV_VAR = "ADVQM_SITE_CONFIG"
 # Every real value (modules, partitions, paths) comes from the site's config.yaml.
 DEFAULT_SITE: dict = {
     "name": "default",
-    "launch_mode": "module",
     "launcher": "srun",
     "modules": [],
     "qe_bin": "pw.x",
-    "data_root": "",
     "workdir": "$indir/work_$SLURM_JOBID",
     "local_scratch": "/tmp/qe_scratch_$SLURM_JOBID",
     "account": "",
@@ -58,8 +51,6 @@ DEFAULT_SITE: dict = {
         "nodelist": "",
         "exclude": "",
         "cpus_per_task": 1,
-        "image": "",
-        "image_tar": "",
         "extra_sbatch": [],
     },
     "gpu": {
@@ -67,8 +58,6 @@ DEFAULT_SITE: dict = {
         "nodelist": "",
         "exclude": "",
         "cpus_per_task": 4,
-        "image": "",
-        "image_tar": "",
         "extra_sbatch": [],
     },
     "app": {
@@ -79,7 +68,7 @@ DEFAULT_SITE: dict = {
     },
 }
 
-_VALID = {"launch_mode": ("docker", "module"), "launcher": ("mpirun", "srun")}
+_VALID = {"launcher": ("mpirun", "srun")}
 
 
 def _merge(base: dict, override: dict) -> dict:

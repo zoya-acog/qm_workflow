@@ -125,7 +125,7 @@ keep the paths set. `make run` refuses to start without
 
 ```bash
 ADVQM_SITE_CONFIG=$PWD/config.yaml .venv/bin/python -c \
-  "from advQMcalc_test.site_config import SITE; print(SITE['launch_mode'], SITE['app']['runs_dir'])"
+  "from advQMcalc_test.site_config import SITE; print(SITE['modules'], SITE['app']['runs_dir'])"
 ```
 
 ## 5. Launch the app

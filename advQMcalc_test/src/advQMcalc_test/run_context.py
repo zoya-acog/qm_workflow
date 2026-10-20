@@ -10,14 +10,6 @@ from textwrap import dedent
 
 from .site_config import SITE
 
-# Kept as module constants for older importers (cli.py); values come from the site config.
-CPU_IMAGE = SITE["cpu"]["image"]
-CPU_IMAGE_TAR = SITE["cpu"]["image_tar"]
-GPU_IMAGE = SITE["gpu"]["image"]
-GPU_IMAGE_TAR = SITE["gpu"]["image_tar"]
-DATA_ROOT = SITE["data_root"]
-GPU_EXCLUDE_NODES = SITE["gpu"]["exclude"]
-
 
 
 class RunContext:
@@ -107,11 +99,7 @@ class RunContext:
 
         pad = " " * 12  # keeps multi-line inserts aligned for dedent()
         site = SITE
-        kind = "GPU" if gpu else "CPU"
         res = site["gpu"] if gpu else site["cpu"]
-        docker = site["launch_mode"] == "docker"
-        if docker and site["launcher"] != "mpirun":
-            raise ValueError("site config: launch_mode 'docker' needs launcher 'mpirun'")
 
         # #SBATCH resource lines; empty site values are left out of the script.
         sbatch = []
@@ -151,47 +139,12 @@ class RunContext:
         workdir = site["workdir"]
         local_scratch = site["local_scratch"]
         remote_workdir = not workdir.startswith("$indir")
-        if docker:
-            # QE always runs from a docker image (DevOps policy: containers only).
-            # Paths are mounted at identical locations so the generated QE input
-            # (pseudo_dir, outdir) works unchanged, and MPI runs inside the
-            # container as one job (plain `srun pw.x` gave uncoordinated copies).
-            image, image_tar = res["image"], res["image_tar"]
-            data_root = site["data_root"]
-            env_lines = "\n".join(
-                [
-                    "export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK",
-                    f'IMG="{image}"',
-                    "# Load the image on this node once (flock: one loader per node).",
-                    'if ! docker image inspect "$IMG" >/dev/null 2>&1; then',
-                    f"    flock /tmp/advqm_docker_load.lock sh -c 'docker image inspect {image} >/dev/null 2>&1 || docker load -i {image_tar}'",
-                    "fi",
-                    "# ponytail: retain the existing cluster-specific QE executable and",
-                    "# paths; ceiling: the UI's qe_command field is ignored here. Upgrade",
-                    "# by parameterizing this script with a validated qe_command value.",
-                ]
-            ).replace("\n", "\n" + pad)
-            mounts = f'-v {data_root}:{data_root} -v "$localscratch:$localscratch"'
-            if remote_workdir:
-                mounts += ' -v "$workdir:$workdir"'
-            launch = "\n".join(
-                [
-                    f"docker run --rm {'--device nvidia.com/gpu=all ' if gpu else ''}\\",
-                    '    --label user="$(id -un)" \\',
-                    f'    --label description="advQMcalc_test QE {kind} job ($SLURM_JOB_NAME)" \\',
-                    '    --user "$(id -u):$(id -g)" -e HOME=/tmp -e OMP_NUM_THREADS \\',
-                    f"    {mounts} \\",
-                    '    -w "$workdir" "$IMG" \\',
-                    f'    {qe_cmd} -i "$infile.in" > "$infile.out"',
-                ]
-            ).replace("\n", "\n" + pad)
-        else:
-            # QE installed on the cluster, made available with `module load`.
-            env_lines = "\n".join(
-                ["export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK"]
-                + [f"module load {m}" for m in site["modules"]]
-            ).replace("\n", "\n" + pad)
-            launch = f'{qe_cmd} -i "$infile.in" > "$infile.out"'
+        # QE installed on the cluster, made available with `module load`.
+        env_lines = "\n".join(
+            ["export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK"]
+            + [f"module load {m}" for m in site["modules"]]
+        ).replace("\n", "\n" + pad)
+        launch = f'{qe_cmd} -i "$infile.in" > "$infile.out"'
 
         # A workdir outside the run folder (cluster scratch): copy the .out back
         # even when QE fails, so the Runs page can still show the error.

@@ -22,17 +22,8 @@ mkdir -p "$workdir" && cd "$workdir" && echo "$workdir"
 trap 'cp "$workdir/$infile.out" "$indir/" 2>/dev/null || true' EXIT
 cp -r "$indir/$infile.in" "$workdir"
 
-# QE's scratch/coordination files (*.save/, pwscf.para,
-# pwscf.restart, ...) race across MPI ranks when written to the
-# NFS-mounted workdir — NFS's weaker concurrent-unlink semantics
-# cause "File cannot be deleted" Fortran errors (exit code 2)
-# even when the calculation itself converges correctly and
-# prints JOB DONE. disk_io='none' alone isn't enough: QE still
-# writes/deletes small MPI coordination files at shutdown
-# regardless of that setting. Point outdir at node-local scratch
-# instead — only the small .out file (captured via the stdout
-# redirect below) needs to survive, we don't use
-# restart-from-checkpoint anywhere in this pipeline.
+# QE temporary files go to a scratch directory and disk_io is 'none',
+# which avoids file conflicts between MPI ranks on shared storage.
 localscratch="/hpfs/userws/$USER/workdir/$SLURM_JOBID/tmp"
 mkdir -p "$localscratch"
 if grep -q "outdir" "$infile.in"; then
@@ -46,18 +37,8 @@ else
     sed -i "/&CONTROL/a\  disk_io = 'none'" "$infile.in"
 fi
 
-# Domain guidance: for relax/vc-relax, make ion_dynamics explicit
-# rather than relying on QE's unstated default (which happens to
-# already be 'bfgs', but an unstated default is fragile — it
-# silently changes behavior if a future QE version's default
-# changes, and it's undocumented to anyone reading the input
-# file). Only applies to relax/vc-relax; scf has no &IONS block
-# and shouldn't get one. Inserted right after &ELECTRONS's own
-# closing "/" (matched via awk, not sed, since a QE input has
-# several bare "/" lines — one per namelist — and only this one
-# is unambiguous: it's the first bare "/" after &ELECTRONS opens).
-# vc-relax additionally needs a &CELL namelist (QE otherwise
-# fails with: bad line in namelist &cell).
+# relax / vc-relax: add &IONS (and &CELL for vc-relax) with BFGS after
+# &ELECTRONS; QE requires &CELL for vc-relax.
 vc=0
 if grep -q "calculation = 'vc-relax'" "$infile.in"; then vc=1; fi
 if grep -qE "calculation = '(vc-)?relax'" "$infile.in" && ! grep -q "&IONS" "$infile.in"; then

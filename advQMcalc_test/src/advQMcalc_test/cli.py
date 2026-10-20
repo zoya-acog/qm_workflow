@@ -1466,7 +1466,7 @@ def main():
     )
     parser.add_argument("--gpu", action="store_true", help="Run QE on GPU (partition from the site config)")
     parser.add_argument(
-        "--gpu-type", default=None, help="GPU gres type, e.g. nvidia_geforce_rtx_4090"
+        "--gpu-type", default=None, help="GPU gres type, e.g. a100"
     )
     parser.add_argument("--gpus", type=int, default=1, help="GPUs per job (one MPI rank each)")
     parser.add_argument("--qe-command", default="pw.x", help="QE executable in the SLURM script")

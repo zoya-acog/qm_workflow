@@ -1,13 +1,12 @@
 """Cluster-specific settings for the generated SLURM job scripts.
 
-The built-in DEFAULT_SITE reproduces our own cluster (QE in Docker images,
-partitions pzero/pgpu). Another cluster supplies a config file (YAML, or
-JSON) and points the ADVQM_SITE_CONFIG environment variable at it; its keys
-override the defaults (nested "cpu"/"gpu" sections are merged key by key). See
-config.example.yaml and site_configs/ for examples.
+The built-in DEFAULT_SITE is neutral (QE from a module, no partitions or
+paths). A site describes itself in a config file (config.yaml, or JSON) named
+by the ADVQM_SITE_CONFIG environment variable; its keys override the defaults
+(nested "cpu"/"gpu" sections are merged key by key). See config.example.yaml.
 
 Keys
-  launch_mode    "docker": run QE from a Docker image (ours).
+  launch_mode    "docker": run QE from a Docker image (development cluster).
                  "module": run a QE installed on the cluster, loaded with
                  `module load` (e.g. DeltaHPC's quantum-espresso/7.1).
   launcher       "mpirun": `mpirun -np <ranks> pw.x` (inside the image for docker).
@@ -41,47 +40,42 @@ from pathlib import Path
 
 ENV_VAR = "ADVQM_SITE_CONFIG"
 
+# Neutral defaults: QE from a module launched with srun, nothing site-specific.
+# Every real value (modules, partitions, paths) comes from the site's config.yaml.
 DEFAULT_SITE: dict = {
-    "name": "own",
-    "launch_mode": "docker",
-    "launcher": "mpirun",
+    "name": "default",
+    "launch_mode": "module",
+    "launcher": "srun",
     "modules": [],
     "qe_bin": "pw.x",
-    "data_root": "/mnt/own6d/qe_workflow/data",
+    "data_root": "",
     "workdir": "$indir/work_$SLURM_JOBID",
     "local_scratch": "/tmp/qe_scratch_$SLURM_JOBID",
     "account": "",
     "qos": "",
     "cpu": {
-        "partition": "pzero",
-        "nodelist": "own9",
+        "partition": "",
+        "nodelist": "",
         "exclude": "",
         "cpus_per_task": 1,
-        "image": "advqm-qe-cpu:7.1",
-        "image_tar": "/mnt/own6d/qe_workflow/data/gpu-build/advqm-qe-cpu-7.1.tar",
+        "image": "",
+        "image_tar": "",
         "extra_sbatch": [],
     },
     "gpu": {
-        "partition": "pgpu",
+        "partition": "",
         "nodelist": "",
-        # own3: GTX 1080 Ti has no kernels in the GPU image. own10: our user is
-        # not in the docker group there. own5: Docker cannot find the NVIDIA CDI
-        # device spec ('could not select device driver "cdi"'); remove it once
-        # an admin has fixed the node.
-        "exclude": "own3,own5,own10",
+        "exclude": "",
         "cpus_per_task": 4,
-        "image": "advqm-qe-gpu:7.1",
-        "image_tar": "/mnt/own6d/qe_workflow/data/gpu-build/advqm-qe-gpu-7.1.tar",
+        "image": "",
+        "image_tar": "",
         "extra_sbatch": [],
     },
     "app": {
-        "upload_dir": "/mnt/own6d/qe_workflow/data/.voila_uploads",
-        "runs_dir": "/mnt/own6d/qe_workflow/data/runs",
-        "pseudo_dir": "/mnt/own6d/qe_workflow/data/pseudos",
-        "gpu_types": [
-            {"text": "RTX 4090", "value": "nvidia_geforce_rtx_4090"},
-            {"text": "RTX 5080", "value": "nvidia_geforce_rtx_5080"},
-        ],
+        "upload_dir": "uploads",
+        "runs_dir": "runs",
+        "pseudo_dir": "",
+        "gpu_types": [],
     },
 }
 

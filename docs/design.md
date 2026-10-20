@@ -19,14 +19,16 @@ and docs; the backend is changed only by agreement.
 
 **Decision:** every cluster-specific value (launch mode, MPI launcher, modules,
 partitions, node lists, account/QOS, scratch and app paths, GPU names) lives in
-`site_config.py`. Our cluster is the built-in default; another site points
-`ADVQM_SITE_CONFIG` at a YAML file (`config.yaml`, used by `make run`) that overrides it.
+one file, `config.yaml` (used by `make run`, or named by `ADVQM_SITE_CONFIG`).
+`site_config.py` reads it over neutral built-in defaults; `config.example.yaml`
+is pre-filled for DeltaHPC.
 
 **Options:** separate code branches per site (rejected: fixes would have to be
 made twice); environment variables per value (rejected: dozens of variables,
 no nesting for CPU/GPU).
 
-**Consequence:** changing the default changes every job script on our cluster;
+**Consequence:** a change to `config.example.yaml` or to the script generator changes
+the job scripts;
 `tests/expected/` records the reference scripts for the DeltaHPC example, and the
 script the client's own 0.0.16 wrote; a test checks every line of that one is kept.
 

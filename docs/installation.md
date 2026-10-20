@@ -130,8 +130,9 @@ everything under **Required**:
 Then, under **SLURM resources**, the `cpu` / `gpu` `partition`, and `account` /
 `qos` if your site requires them. Empty values are left out of the job script.
 
-Keys you leave out keep their built-in default, which describes the
-developers' cluster, so set every path. `make run` refuses to start without
+`config.example.yaml` is pre-filled with the DeltaHPC values (modules, `srun`,
+`/hpfs` scratch); keys you remove fall back to neutral built-in defaults, so
+keep the paths set. `make run` refuses to start without
 `config.yaml`; to keep the file elsewhere, run `make run CONFIG=/path/to/config.yaml`.
 
 ### Check

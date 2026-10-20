@@ -17,8 +17,7 @@ from advQMcalc_test.site_config import load_site_config
 from conftest import REPO
 
 EXPECTED = Path(__file__).resolve().parent / "expected"
-DELTAHPC = REPO / "advQMcalc_test" / "site_configs" / "deltahpc.example.yaml"
-EXAMPLE = REPO / "config.example.yaml"
+EXAMPLE = REPO / "config.example.yaml"  # pre-filled for DeltaHPC
 
 
 def _script(tmp_path, monkeypatch, site_file=None, **kwargs) -> str:
@@ -37,8 +36,8 @@ def _script(tmp_path, monkeypatch, site_file=None, **kwargs) -> str:
     ("reference_gpu", {"gpu": True}),
 ])
 def test_scripts_match_reference_output(tmp_path, monkeypatch, name, kwargs):
-    # Recorded with the DeltaHPC example config; review any difference before updating.
-    text = _script(tmp_path, monkeypatch, site_file=DELTAHPC, **kwargs)
+    # Recorded with config.example.yaml (DeltaHPC); review any difference before updating.
+    text = _script(tmp_path, monkeypatch, site_file=EXAMPLE, **kwargs)
     assert text == (EXPECTED / f"{name}.slurm").read_text()
 
 
@@ -49,21 +48,21 @@ def test_client_original_script_is_kept_line_for_line(tmp_path, monkeypatch):
     def lines(text):
         return [line.replace('"', "") for line in text.splitlines() if line.strip()]
 
-    ours = iter(lines(_script(tmp_path, monkeypatch, site_file=DELTAHPC)))
+    ours = iter(lines(_script(tmp_path, monkeypatch, site_file=EXAMPLE)))
     missing = [line for line in lines((EXPECTED / "client_0.0.16.slurm").read_text())
                if not any(line == candidate for candidate in ours)]
     assert missing == []
 
 
 def test_gpu_job_runs_one_mpi_rank_per_gpu(tmp_path, monkeypatch):
-    text = _script(tmp_path, monkeypatch, gpu=True, gpu_type="nvidia_geforce_rtx_4090", gpus=2)
-    assert "#SBATCH --gres=gpu:nvidia_geforce_rtx_4090:2" in text
+    text = _script(tmp_path, monkeypatch, site_file=EXAMPLE, gpu=True, gpu_type="a100", gpus=2)
+    assert "#SBATCH --gres=gpu:a100:2" in text
     assert "#SBATCH --ntasks=2" in text
-    assert "mpirun -np 2 pw.x -nk 2" in text
+    assert "srun pw.x -nk 2" in text
 
 
 def test_module_site_loads_modules_and_uses_srun_in_scratch(tmp_path, monkeypatch):
-    text = _script(tmp_path, monkeypatch, site_file=DELTAHPC, ntasks=16)
+    text = _script(tmp_path, monkeypatch, site_file=EXAMPLE, ntasks=16)
     assert "module load medsci\nmodule load quantum-espresso/7.1" in text
     assert 'srun pw.x -i "$infile.in"' in text
     assert 'workdir="/hpfs/userws/$USER/workdir/$SLURM_JOBID"' in text
@@ -75,7 +74,7 @@ def test_module_site_loads_modules_and_uses_srun_in_scratch(tmp_path, monkeypatc
 
 def test_docker_site_rejects_srun(tmp_path, monkeypatch, tmp_path_factory):
     site = tmp_path_factory.mktemp("site") / "site.json"
-    site.write_text('{"launcher": "srun"}')
+    site.write_text('{"launch_mode": "docker", "launcher": "srun"}')
     with pytest.raises(ValueError, match="needs launcher 'mpirun'"):
         _script(tmp_path, monkeypatch, site_file=site)
 
@@ -88,7 +87,7 @@ def test_unknown_launch_mode_is_refused(tmp_path):
 
 
 @pytest.mark.parametrize("site_file, kwargs", [
-    (None, {}), (None, {"gpu": True}), (DELTAHPC, {}), (DELTAHPC, {"gpu": True}),
+    (None, {}), (None, {"gpu": True}), (EXAMPLE, {}), (EXAMPLE, {"gpu": True}),
 ])
 def test_generated_scripts_are_valid_bash(tmp_path, monkeypatch, site_file, kwargs):
     script = tmp_path / "job.sh"
@@ -100,7 +99,7 @@ def test_generated_scripts_are_valid_bash(tmp_path, monkeypatch, site_file, kwar
 def test_example_config_loads_as_a_module_site():
     site = load_site_config(EXAMPLE)
     assert (site["launch_mode"], site["launcher"]) == ("module", "srun")
-    assert site["modules"] == ["quantum-espresso/7.1"]
+    assert site["modules"] == ["medsci", "quantum-espresso/7.1"]
     assert site["app"]["contact"] == [{"name": "Your Name", "email": "you@example.com"}]
 
 

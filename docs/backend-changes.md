@@ -77,10 +77,11 @@ overrides with a YAML file, `config.yaml` (or any file named in the
 | SLURM resources | partition, account, QOS, node list, threads per rank (empty values are omitted) |
 | Application paths | runs, uploads and pseudopotential directories |
 
-`advQMcalc_test/site_configs/deltahpc.example.yaml` reproduces the 0.0.16 job
-script: the generated script contains every line of the original, in the same
-order. The built-in defaults describe the development cluster, so always run
-with your own configuration file (see [installation.md](installation.md)).
+`config.example.yaml` is pre-filled with these values and reproduces the
+0.0.16 job script: the generated script contains every line of the original,
+in the same order. The built-in defaults are neutral (no partitions or paths),
+so every real value comes from your `config.yaml` (see
+[installation.md](installation.md)).
 
 ## Reviewing the changes
 

@@ -6,11 +6,12 @@
 # gitignored. `make run` uses ./config.yaml; to keep it elsewhere, set
 # ADVQM_SITE_CONFIG=/path/to/config.yaml.
 #
-# Change everything under "Required". Keys you leave out keep their built-in
-# defaults, which describe the developers' cluster, not yours.
+# Pre-filled for DeltaHPC: these values reproduce the job script of
+# advQMcalc_test 0.0.16 (module load medsci + quantum-espresso/7.1, srun pw.x,
+# /hpfs scratch). Fill in the paths, partitions and contacts marked below.
 # See docs/installation.md, step 4.
 
-name: my-cluster
+name: deltahpc
 
 # ─── Required ────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,7 @@ launch_mode: module
 # Modules a job loads before running pw.x. A SLURM job inherits nothing from
 # the shell that submitted it, so list everything pw.x needs.
 modules:
+  - medsci
   - quantum-espresso/7.1
 
 # "srun" if your SLURM starts MPI programs itself (most clusters); else "mpirun".
@@ -27,10 +29,10 @@ launcher: srun
 
 # Where QE runs during a job (scratch). $USER and $SLURM_JOBID are expanded
 # by the job; the output file is copied back to the run folder at the end.
-workdir: /scratch/$USER/qe_workflow/$SLURM_JOBID
-local_scratch: /scratch/$USER/qe_workflow/$SLURM_JOBID/tmp
+workdir: /hpfs/userws/$USER/workdir/$SLURM_JOBID
+local_scratch: /hpfs/userws/$USER/workdir/$SLURM_JOBID/tmp
 
-app:
+app:                                    # ← fill in the three paths
   # Run folders: inputs, job scripts, QE output, results.
   # Must be visible at this same path from the compute nodes.
   runs_dir: /shared/qe_workflow/runs

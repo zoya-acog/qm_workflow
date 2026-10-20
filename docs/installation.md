@@ -82,25 +82,11 @@ make test                  # no QE or SLURM needed
 
 ### Pseudopotentials
 
-Put your pseudopotential folder on shared storage that both the app machine
-and the compute nodes see at the same path (for example next to the runs
-folder), and set that path as `pseudo_dir` in `config.yaml`. Files are read in
-place, not copied into runs; a symlinked folder must resolve to the same real
-path on the compute nodes. No pseudopotentials are shipped with the app.
-
-The app picks one file per element automatically:
-
-- the file name starts with the element symbol followed by `.` or `_`
-  (any case) and ends in `.UPF` or `.upf`, e.g. `C_pbe_v1.2.uspp.F.UPF`,
-  `H.pbe-rrkjus_psl.1.0.0.UPF`;
-- the folder holds **exactly one** file per element; with two candidates the
-  run stops and asks you to choose;
-- keep one functional per folder (e.g. all PBE): QE takes the functional from
-  the files;
-- the XDM dispersion correction needs norm-conserving or PAW files, not
-  ultrasoft ones; use Grimme-D3 with ultrasoft sets.
-
-The verification run in step 6 needs files for **C** and **H**.
+Pseudopotentials are not distributed with the application. Place your `.UPF`
+files in a single directory on shared storage, accessible at the same path from
+both the application host and the compute nodes, and set this path as
+`pseudo_dir` in `config.yaml`. The verification run in step 6 requires
+pseudopotentials for carbon (C) and hydrogen (H).
 
 ### Check
 

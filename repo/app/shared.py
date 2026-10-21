@@ -333,14 +333,14 @@ def labeled_field(w, style: str = "", info: str | None = None):
     )]
     if info:
         caption_children.append(ipv.Html(
-            tag="span", children=["ⓘ"], class_="advqm-tip",
+            tag="span", children=["ⓘ"], class_="advqm-tip advqm-tip-field",
             attributes={"data-tip": info, "aria-label": info},
             style_="margin-left:5px;",
         ))
     caption = ipv.Html(
         tag="div",
         children=caption_children,
-        style_="display:flex; align-items:center; margin:8px 0 2px 0;",
+        style_="position:relative; display:flex; align-items:center; margin:8px 0 2px 0;",
     )
     return ipv.Html(tag="div", children=[caption, w], style_=style)
 

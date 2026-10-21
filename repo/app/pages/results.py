@@ -558,22 +558,14 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
         sel.on_event("update:search-input", _on_search)
         return sel
 
-    render_timer: dict = {"timer": None}
-    render_lock = threading.Lock()
-
-    def _render_selection() -> None:
-        with render_lock:  # one rebuild at a time; each uses the latest selection
-            render_comparison()
-
     def _on_select(change) -> None:
-        # The menu stays open so several jobs can be picked in a row; the table
-        # is rebuilt once, shortly after the last pick, not after every click.
+        # Picks only update the selection; the menu stays open for more picks
+        # and the results load when Done is clicked.
         selection["labels"] = list(change["new"] or [])
-        if render_timer["timer"] is not None:
-            render_timer["timer"].cancel()
-        render_timer["timer"] = threading.Timer(0.8, _render_selection)
-        render_timer["timer"].daemon = True
-        render_timer["timer"].start()
+
+    done_btn = ipv.Btn(children=["Done"], color="primary", small=True, depressed=True,
+                       disabled=not completed_rows, class_="advqm-done-btn")
+    done_btn.on_event("click", lambda *_: render_comparison())
 
     downloads_html = widgets.HTML()
     csv_download = types.SimpleNamespace(value="")
@@ -814,8 +806,11 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
 
     select_holder.children = [labeled_field(_make_select(selection["labels"]))]
     render_comparison()
+    select_holder.layout.flex = "1 1 auto"
+    select_row = widgets.HBox([select_holder, done_btn])
+    select_row.add_class("advqm-select-row")
     comparison_card = widgets.VBox([
-        select_holder,
+        select_row,
         downloads_row,
         comparison_note,
         comparison_table,

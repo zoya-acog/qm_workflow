@@ -94,7 +94,7 @@ _DOC_REFERENCES_HTML = """
 <li><a href="http://iopscience.iop.org/0953-8984/21/39/395502/" target="_blank">J. Phys. Condens. Matter 21, 395502 (2009)</a></li>
 <li>(For GPU enabled Versions) <a href="https://doi.org/10.1063/5.0005082" target="_blank">J. Chem. Phys. 152, 154105 (2020)</a></li>
 <li><a href="https://pypi.org/project/cif2cell/" target="_blank">Reference for cif2cell</a></li>
-<li><a href="https://pymatgen.org/" target="_blank">pymatgen</a>: used on the Results page to determine the number of molecules (formula units) in the unit cell (Z), by reading the CIF structure (<code>Structure</code>) and identifying bonded molecules (<code>StructureGraph</code> with <code>JmolNN</code> bonding).</li>
+<li><a href="https://pymatgen.org/" target="_blank">Reference for pymatgen</a> (used to determine the number of molecules in the unit cell, Z)</li>
 <li><a href="https://www.quantum-espresso.org/Doc/INPUT_PW.html#id51" target="_blank">pw.x input description</a></li>
 </ul>
 <p><b>Contact</b></p>

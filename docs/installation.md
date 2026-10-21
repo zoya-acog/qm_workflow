@@ -30,7 +30,7 @@ a SLURM login node (or any host where those commands work).
 | | What | Notes |
 |---|---|---|
 | OS | Linux x86-64 | |
-| Python | 3.10 or newer, with `venv` | no root needed |
+| Python | 3.11 or newer, with `venv` | no root needed; required by pymatgen |
 | Scheduler | SLURM; `sbatch` and `squeue` work **on the machine serving the app** | the app submits with `sbatch` |
 | QE | `pw.x` 7.1 on the compute nodes (module or install) | GPU runs need a GPU-enabled build |
 | Storage | a folder visible at the **same path** from the app machine and the compute nodes | runs and pseudopotentials live here |
@@ -38,7 +38,7 @@ a SLURM login node (or any host where those commands work).
 ### Check
 
 ```bash
-python3 --version          # 3.10+
+python3 --version          # 3.11+
 sbatch --version && squeue -u $USER | head -1
 srun -N1 -n1 bash -lc 'module load quantum-espresso/7.1 && which pw.x'
 ```
@@ -50,6 +50,10 @@ From a copy of this repository on shared storage, in its top folder:
 ```bash
 make install               # .venv with the app, backend, pymatgen, cif2cell, tests
 ```
+
+If the default `python3` is older than 3.11, point `make install` at a newer
+interpreter: `make install PYTHON=/path/to/python3.11` (for example from a
+`module load python/3.11` or a conda environment).
 
 `make install` also registers the widget front-ends (ipyvuetify,
 ipywidgets) and the Jupyter kernel `python3` in the environment. Without the
@@ -199,7 +203,7 @@ Everything comes from `requirements.txt` into `.venv`; QE comes from your cluste
 | advQMcalc_test | 0.0.18 (this repo) | backend |
 | pytest | latest | `make test` |
 
-From your cluster: Python 3.10 or newer, SLURM client commands on the app
+From your cluster: Python 3.11 or newer, SLURM client commands on the app
 machine, and Quantum ESPRESSO 7.1 (`pw.x`) on the compute nodes, GPU-enabled
 for GPU runs.
 

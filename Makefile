@@ -1,3 +1,4 @@
+PYTHON ?= python3
 VENV ?= .venv
 PY := $(VENV)/bin/python
 PORT ?= 8866
@@ -12,7 +13,8 @@ help: ## Show this help
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 install: ## Create .venv, install the app, backend and test dependencies, register widgets and kernel
-	python3 -m venv $(VENV)
+	@$(PYTHON) -c "import sys; sys.exit(sys.version_info < (3, 11))" || { echo "Python 3.11 or newer is required ($(PYTHON) is $$($(PYTHON) -V 2>&1)); run: make install PYTHON=/path/to/python3.11"; exit 1; }
+	$(PYTHON) -m venv $(VENV)
 	$(PY) -m pip install -q --upgrade pip
 	$(PY) -m pip install -q -r requirements.txt
 	$(VENV)/bin/jupyter nbextension install --sys-prefix --py ipyvuetify --overwrite >/dev/null

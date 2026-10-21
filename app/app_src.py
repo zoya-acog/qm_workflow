@@ -116,9 +116,20 @@ def app(app_mode: bool = True, debug: bool = False):
     ])
     docs.add_class("advqm-docs")
 
+    # Copyright footer: after the content, and at the bottom of the window when
+    # a page is short (the page fills the window height; the content area grows).
+    footer = widgets.HTML(
+        '<div style="text-align:center; padding:12px 8px 6px; margin-top:16px; '
+        'border-top:1px solid #e0e0e0; color:#78909c; font-size:0.78rem; '
+        'letter-spacing:0.02em;">Confidential and Proprietary © 2017-26 Aganitha</div>'
+    )
+    shell.layout.flex = "1 0 auto"
+    page = widgets.VBox([docs, shell, footer],
+                        layout=widgets.Layout(min_height="calc(100vh - 96px)"))
+
     show_page("dashboard")
 
-    my_app.content.children = [docs, shell]
+    my_app.content.children = [page]
     return my_app
 
 

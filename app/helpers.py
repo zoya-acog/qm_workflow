@@ -370,6 +370,16 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
     border:1px solid #e5e9f0; }
 /* ⓘ inside a download button (white, hover shows its title text) */
 .advqm-btn-info { color:#fff; margin-left:8px; cursor:help; font-weight:700; opacity:0.9; }
+/* ⓘ hover text, shown at once (a title attribute only appears after the
+   browser's own delay). advqm-tip-end opens the box to the left of the icon. */
+.advqm-tip { position:relative; cursor:help; color:#1565c0; font-weight:700; }
+.advqm-btn-info.advqm-tip { color:#fff; }
+.advqm-tip:hover::after { content:attr(data-tip); position:absolute; top:calc(100% + 6px);
+    left:0; z-index:1000; width:max-content; max-width:320px; padding:6px 10px;
+    border-radius:6px; background:#37474f; color:#fff; font-size:0.78rem; font-weight:400;
+    line-height:1.45; letter-spacing:normal; text-align:left; white-space:pre-line;
+    box-shadow:0 2px 8px rgba(0,0,0,0.2); pointer-events:none; }
+.advqm-tip.advqm-tip-end:hover::after { left:auto; right:0; }
 .advqm-btn-info:hover { opacity:1; }
 /* Results download links in one row, each only as wide as its content. */
 .advqm-downloads-row { align-items:center !important; gap:16px; flex-wrap:wrap !important;

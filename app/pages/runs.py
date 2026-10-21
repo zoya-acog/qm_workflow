@@ -22,6 +22,8 @@ from helpers import (
     status_category,
 )
 from shared import (
+    CALC_TYPE_HELP,
+    info_icon_html,
     CALC_TYPE_LABELS,
     batch_status_html,
     grid_columns,
@@ -52,11 +54,7 @@ _ROW_COL_LABELS = ["Job ID", "Run ID", "User Name", "CIF File", "Path", "Calcula
 
 # ⓘ next to the Calculation Type header: the table shows QE's own keywords, the
 # tooltip says what each one means.
-_CALC_TYPE_INFO = (
-    ' <span style="cursor:help; color:#1565c0; font-weight:700;" '
-    'title="scf = Single Point Energy&#10;relax = Fixed Cell Optimization'
-    '&#10;vc-relax = Variable Cell Optimization">&#9432;</span>'
-)
+_CALC_TYPE_INFO = " " + info_icon_html(CALC_TYPE_HELP)
 
 
 _CIF_CELL_MAX = 20

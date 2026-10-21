@@ -304,6 +304,16 @@ def group_cif_names(rows: list[dict]) -> list[str]:
     ]
 
 
+def info_icon_html(text: str, end: bool = False) -> str:
+    """ⓘ with hover text that appears immediately (CSS, see .advqm-tip).
+
+    end=True opens the text to the left, for icons near the right edge.
+    """
+    tip = html.escape(text, quote=True).replace("\n", "&#10;")
+    cls = "advqm-tip advqm-tip-end" if end else "advqm-tip"
+    return f'<span class="{cls}" data-tip="{tip}" aria-label="{tip}">&#9432;</span>'
+
+
 def labeled_field(w, style: str = "", info: str | None = None):
     """Show an ipyvuetify field's name as a plain label ABOVE the input box.
 
@@ -323,8 +333,9 @@ def labeled_field(w, style: str = "", info: str | None = None):
     )]
     if info:
         caption_children.append(ipv.Html(
-            tag="span", children=["ⓘ"], attributes={"title": info},
-            style_="cursor:help; color:#1565c0; font-weight:700; margin-left:5px;",
+            tag="span", children=["ⓘ"], class_="advqm-tip",
+            attributes={"data-tip": info, "aria-label": info},
+            style_="margin-left:5px;",
         ))
     caption = ipv.Html(
         tag="div",
@@ -341,6 +352,12 @@ def _fmt_energy(v) -> str:
 
 
 # Display names for calculation types; the backend keeps the original keys.
+# Hover text explaining QE's calculation-type keywords (Runs and Results tables).
+CALC_TYPE_HELP = (
+    "scf = Single Point Energy\nrelax = Fixed Cell Optimization\n"
+    "vc-relax = Variable Cell Optimization"
+)
+
 CALC_TYPE_LABELS = {
     "scf": "Single Point Energy",
     "relax": "Fixed Cell Optimization",
@@ -397,6 +414,7 @@ def _list_all_run_rows(base: Path, only_successful: bool = False) -> list[dict]:
             "batch_id": state.get("batch_id"),
             "array_task_id": crystal.get("array_task_id"),
             "run_label": state.get("run_label"),
+            "calc_type": state.get("calc_type"),
             "submitted_by": state.get("submitted_by"),
             "cif_dir": state.get("cif_dir"),
             "kpoints": crystal.get("kpoints"),

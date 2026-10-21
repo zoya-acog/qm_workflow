@@ -201,6 +201,8 @@ def build_app_style() -> str:
    own CSS keys its font-size off these, so without this override every
    widget label/button/input renders smaller than the app was designed at. */
 :root { --jp-ui-font-size1: 14px !important; --jp-content-font-size1: 15px !important; }
+/* Nothing below the app: no bottom padding on the notebook page around it. */
+.jp-Notebook, #rendered_cells, .jp-Cell, .jp-OutputArea { padding-bottom:0 !important; margin-bottom:0 !important; }
 body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size:14px; overflow-x:hidden; }
 
 /* "Use GPU" checkbox label: bold + black */

@@ -36,7 +36,7 @@ class HubApp:
             layout=widgets.Layout(
                 width="min(96vw, 1600px)",
                 margin="0 auto",
-                padding="0 8px 24px",
+                padding="0 8px 0",
             ),
         )
 

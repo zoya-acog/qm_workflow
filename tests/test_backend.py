@@ -177,3 +177,43 @@ def test_results_describe_the_run_copy_not_a_changed_upload(tmp_path):
     meta = _cif_result_metadata({"run_path": str(run), "cif": str(upload)})
     assert meta["cif_path"] == str(run / "inputs" / "crystal" / "benzene.cif")
     assert meta["space_group"] != "P 1"
+
+
+# ─── SLURM commands that do not answer ───────────────────────────────────────
+
+def _fake_commands(tmp_path, monkeypatch, scripts):
+    """Put stand-in SLURM commands first on PATH and shorten the timeouts."""
+    import logging
+    import os
+    from advQMcalc_test import cli
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for name, body in scripts.items():
+        (bin_dir / name).write_text("#!/bin/sh\n" + body + "\n")
+        (bin_dir / name).chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(cli, "SBATCH_TIMEOUT_S", 1)
+    monkeypatch.setattr(cli, "SLURM_QUERY_TIMEOUT_S", 1)
+    return cli, logging.getLogger("test")
+
+
+def test_hung_sbatch_reports_an_error(tmp_path, monkeypatch):
+    cli, _ = _fake_commands(tmp_path, monkeypatch, {"sbatch": "exec sleep 10"})
+    script = tmp_path / "job.slurm"
+    script.write_text("#!/bin/bash\n")
+    with pytest.raises(RuntimeError, match="did not answer"):
+        cli._submit_slurm_script(script)
+
+
+def test_hung_sacct_falls_back_to_squeue(tmp_path, monkeypatch):
+    cli, log = _fake_commands(tmp_path, monkeypatch, {"sacct": "exec sleep 10", "squeue": "echo RUNNING"})
+    assert cli._job_state_with_fallback("123", log) == "RUNNING"
+
+
+def test_hung_sacct_and_squeue_raise_instead_of_waiting(tmp_path, monkeypatch):
+    import subprocess
+
+    cli, log = _fake_commands(tmp_path, monkeypatch, {"sacct": "exec sleep 10", "squeue": "exec sleep 10"})
+    with pytest.raises(subprocess.TimeoutExpired):
+        cli._job_state_with_fallback("123", log)

@@ -184,6 +184,13 @@ def _write_summary_json(rows, out_path):
 # ============================================================
 # QE INPUT GENERATION
 # ============================================================
+# Upper limits for external commands, so a hung command ends with an error
+# instead of blocking a submission or a status check indefinitely.
+CIF2CELL_TIMEOUT_S = 600
+SBATCH_TIMEOUT_S = 120
+SLURM_QUERY_TIMEOUT_S = 60
+
+
 def _generate_qe_input_with_cif2cell(crystal_dir, staged_cif, calc_type):
     if not calc_type or str(calc_type).strip() == "":
         raise RuntimeError(f"Invalid calc_type='{calc_type}'")
@@ -208,6 +215,7 @@ def _generate_qe_input_with_cif2cell(crystal_dir, staged_cif, calc_type):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        timeout=CIF2CELL_TIMEOUT_S,
     )
 
     if result.returncode != 0:
@@ -681,13 +689,20 @@ def _cleanup_qe_input(qe_path, pseudo_dir, pp_map, calc_type, kpoints, system_pa
 # SLURM SUBMISSION / MONITORING
 # ============================================================
 def _submit_slurm_script(script_path):
-    result = subprocess.run(
-        ["sbatch", script_path.name],
-        cwd=script_path.parent,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            ["sbatch", script_path.name],
+            cwd=script_path.parent,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=SBATCH_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(
+            f"sbatch did not answer within {SBATCH_TIMEOUT_S} s (SLURM may be unavailable). "
+            "The job may still have been queued: check squeue before submitting again."
+        ) from None
     if result.returncode != 0:
         raise RuntimeError(
             "sbatch submission failed:\n"
@@ -831,6 +846,7 @@ def _query_slurm_job(job_id):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        timeout=SLURM_QUERY_TIMEOUT_S,
     )
     if result.returncode != 0:
         raise RuntimeError(f"sacct failed for job {job_id}\nSTDERR:\n{result.stderr}")
@@ -877,6 +893,7 @@ def _job_state_with_fallback(job_id, logger):
     result = subprocess.run(
         ["squeue", "-j", str(job_id), "-h", "-o", "%T"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        timeout=SLURM_QUERY_TIMEOUT_S,
     )
     queued = result.stdout.split()
     if result.returncode == 0 and queued:

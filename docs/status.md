@@ -16,4 +16,5 @@
 - GPU runs need a GPU-enabled QE module.
 - QE 7.1 relax / vc-relax not yet run end to end on the target cluster.
 - Multi-node runs: node count is fixed at 1.
+- Runs page Refresh checks unfinished runs one at a time (one `sacct` call each); with several hundred active runs a refresh takes minutes. A single batched status query would remove this.
 - The New Run "QE command" field is ignored (QE comes from the site config).

@@ -23,7 +23,7 @@ from IPython.display import HTML, display
 
 from helpers import load_run_state
 from shared import (
-    DEFAULT_RUNS_DIR, cif_list_text, energy_plot_html, energy_vs_step, group_cif_names, group_rows,
+    CALC_TYPE_HELP, DEFAULT_RUNS_DIR, cif_list_text, info_icon_html, energy_plot_html, energy_vs_step, group_cif_names, group_rows,
     grid_columns, loading_html, trajectory_xsf, RY_TO_KJ_MOL, _Nav, _fmt, _list_all_run_rows, list_rows_all_dirs, labeled_field, ry_to_kj_mol,
 )
 
@@ -254,7 +254,7 @@ def _trajectory_link_html(rows: list[dict], suffix: str) -> str:
     # ⓘ inside the button: hover shows _STRUCTURE_FILES_INFO; clicking the icon
     # itself does not start the download.
     info = (
-        f'<span class="advqm-btn-info" title="{html.escape(_STRUCTURE_FILES_INFO)}" '
+        f'<span class="advqm-btn-info advqm-tip" data-tip="{html.escape(_STRUCTURE_FILES_INFO)}" '
         'onclick="event.preventDefault(); event.stopPropagation();">&#9432;</span>'
     )
     return (
@@ -376,10 +376,12 @@ module.exports = {
 
 # ⓘ next to a Results header (hover text); keyed by the header label.
 _HEAD_INFO = {
-    "Relative Energy per Molecule (kJ/mol)": (
-        ' <span style="cursor:help; color:#1565c0; font-weight:700;" title="Valid when calculations '
-        'are performed with same inputs (e.g. XC functionals, k-point spacing etc.)">&#9432;</span>'
-    ),
+    "Relative Energy per Molecule (kJ/mol)": " " + info_icon_html(
+        "Valid when calculations are performed with same inputs "
+        "(e.g. XC functionals, k-point spacing etc.)", end=True),
+    "Calculation Type": " " + info_icon_html(CALC_TYPE_HELP, end=True),
+    "Plot": " " + info_icon_html(
+        "Plot is available only for 'relax' and 'vc-relax' calculations.", end=True),
 }
 
 
@@ -556,13 +558,22 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
         sel.on_event("update:search-input", _on_search)
         return sel
 
+    render_timer: dict = {"timer": None}
+    render_lock = threading.Lock()
+
+    def _render_selection() -> None:
+        with render_lock:  # one rebuild at a time; each uses the latest selection
+            render_comparison()
+
     def _on_select(change) -> None:
+        # The menu stays open so several jobs can be picked in a row; the table
+        # is rebuilt once, shortly after the last pick, not after every click.
         selection["labels"] = list(change["new"] or [])
-        # A multi-select keeps its menu open after each pick. Swapping in a
-        # fresh widget (same selection) closes it, so no extra click is needed.
-        # Done before rendering so the loading spinner is not hidden by the menu.
-        select_holder.children = [labeled_field(_make_select(selection["labels"]))]
-        render_comparison()
+        if render_timer["timer"] is not None:
+            render_timer["timer"].cancel()
+        render_timer["timer"] = threading.Timer(0.8, _render_selection)
+        render_timer["timer"].daemon = True
+        render_timer["timer"].start()
 
     downloads_html = widgets.HTML()
     csv_download = types.SimpleNamespace(value="")
@@ -749,9 +760,9 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
         columns = [
             "CIF Name", "Space Group", "Cell Parameters", "k-points",
             "Energy (kJ/mol)", "No. of Molecule in the Unit Cell (Z)",
-            "Relative Energy per Molecule (kJ/mol)", "SLURM State", "SLURM Job ID",
+            "Relative Energy per Molecule (kJ/mol)", "Calculation Type", "SLURM State", "SLURM Job ID",
         ]
-        widths = ["9%", "9%", "22%", "8%", "11%", "9%", "11%", "8%", "8%", "5%"]
+        widths = ["9%", "8%", "20%", "7%", "10%", "8%", "10%", "8%", "7%", "8%", "5%"]
         table_items = []
         for item in row_data:
             row = item["row"]
@@ -776,6 +787,7 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
                 (f"{item['formula_units']:g}" if float(item['formula_units']).is_integer()
                  else f"{item['formula_units']:.2f}") if item["formula_units"] else "–",
                 f"{relative:.2f}" if relative is not None else "–",
+                row.get("calc_type") or "–",
                 row.get("slurm_state") or "–",
                 row.get("array_job_id") or row.get("job_id") or "–",
             ]

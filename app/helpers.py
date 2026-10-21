@@ -380,7 +380,15 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
     line-height:1.45; letter-spacing:normal; text-align:left; white-space:pre-line;
     box-shadow:0 2px 8px rgba(0,0,0,0.2); pointer-events:none; }
 .advqm-tip.advqm-tip-end:hover::after { left:auto; right:0; }
+/* Field labels: the text spans the field's own width under its label, so it
+   is never cut off at the edge of a form column. */
+.advqm-tip.advqm-tip-field { position:static; }
+.advqm-tip.advqm-tip-field:hover::after { left:0; right:0; width:auto; max-width:none; }
 .advqm-btn-info:hover { opacity:1; }
+/* Results job selector with its Done button at the end of the field. */
+.advqm-select-row { align-items:flex-end !important; gap:12px; }
+.advqm-select-row > .advqm-done-btn, .advqm-select-row > :last-child { flex:0 0 auto !important;
+    margin-bottom:6px !important; }
 /* Results download links in one row, each only as wide as its content. */
 .advqm-downloads-row { align-items:center !important; gap:16px; flex-wrap:wrap !important;
     padding-top:12px; }

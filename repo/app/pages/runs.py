@@ -207,7 +207,11 @@ def _logs_download_cell(rows: list[dict]) -> widgets.VBox:
         threading.Thread(target=work, daemon=True).start()
 
     btn.on_click(on_click)
-    return widgets.VBox([btn, trigger], layout=widgets.Layout(width="100%"))
+    # The trigger has no visible content but still took a little height, which made
+    # the cell scroll; .advqm-dl-cell hides it (it keeps working while hidden).
+    cell = widgets.VBox([btn, trigger], layout=widgets.Layout(width="100%", overflow="visible"))
+    cell.add_class("advqm-dl-cell")
+    return cell
 
 
 def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:

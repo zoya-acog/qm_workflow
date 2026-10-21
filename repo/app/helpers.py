@@ -385,6 +385,10 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 .advqm-tip.advqm-tip-field { position:static; }
 .advqm-tip.advqm-tip-field:hover::after { left:0; right:0; width:auto; max-width:none; }
 .advqm-btn-info:hover { opacity:1; }
+/* Runs: logs download cell. Only the button takes space; the download helper
+   next to it is hidden, so the cell never scrolls. */
+.advqm-dl-cell { overflow:visible !important; }
+.advqm-dl-cell > :not(:first-child) { display:none !important; }
 /* Results job selector with its Done button at the end of the field. */
 .advqm-select-row { align-items:flex-end !important; gap:12px; }
 .advqm-select-row > .advqm-done-btn, .advqm-select-row > :last-child { flex:0 0 auto !important;

@@ -2,6 +2,8 @@ import sys
 import argparse
 import logging
 import threading
+import uuid
+from datetime import datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -117,8 +119,13 @@ def attach_log_handler(output) -> WidgetLogHandler:
 
 
 def save_uploads(upload_widget, staging_dir: Path) -> list[Path]:
-    """Write uploaded CIF files (bytes) into staging_dir and return their paths."""
-    staging_dir.mkdir(parents=True, exist_ok=True)
+    """Write uploaded CIF files (bytes) into staging_dir and return their paths.
+
+    Each upload gets its own subfolder (time + random id), so two users uploading
+    files with the same name never overwrite each other; file names are kept.
+    """
+    upload_dir = staging_dir / f"{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:8]}"
+    upload_dir.mkdir(parents=True, exist_ok=False)
     paths: list[Path] = []
     value = upload_widget.value
     if isinstance(value, tuple):
@@ -136,7 +143,7 @@ def save_uploads(upload_widget, staging_dir: Path) -> list[Path]:
             content = meta.get("content", b"")
         if not str(name).lower().endswith(".cif"):
             raise ValueError(f"Skipping non-CIF upload: {name}")
-        dest = staging_dir / Path(name).name
+        dest = upload_dir / Path(name).name
         dest.write_bytes(content)
         paths.append(dest)
     return paths

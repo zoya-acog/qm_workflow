@@ -152,3 +152,28 @@ def test_kpoint_grid_from_cell_lengths_and_spacing():
 @pytest.mark.parametrize("module", ["app_src", "pages.new_run", "pages.runs", "pages.results", "pages.dashboard"])
 def test_app_modules_import(module):
     importlib.import_module(module)
+
+
+def test_uploads_with_the_same_name_do_not_overwrite_each_other(tmp_path):
+    from types import SimpleNamespace
+    from helpers import save_uploads
+
+    first = save_uploads(SimpleNamespace(value=({"name": "benzene.cif", "content": b"A"},)), tmp_path)
+    second = save_uploads(SimpleNamespace(value=({"name": "benzene.cif", "content": b"B"},)), tmp_path)
+    assert first[0] != second[0]
+    assert first[0].name == second[0].name == "benzene.cif"
+    assert (first[0].read_bytes(), second[0].read_bytes()) == (b"A", b"B")
+
+
+def test_results_describe_the_run_copy_not_a_changed_upload(tmp_path):
+    from pages.results import _cif_result_metadata
+
+    upload = tmp_path / "uploads" / "benzene.cif"
+    run = tmp_path / "runs" / "run1"
+    (run / "inputs" / "crystal").mkdir(parents=True)
+    upload.parent.mkdir(parents=True)
+    (run / "inputs" / "crystal" / "benzene.cif").write_text(SAMPLE_CIF.read_text())
+    upload.write_text("data_other\n_symmetry_space_group_name_H-M 'P 1'\n")  # replaced later
+    meta = _cif_result_metadata({"run_path": str(run), "cif": str(upload)})
+    assert meta["cif_path"] == str(run / "inputs" / "crystal" / "benzene.cif")
+    assert meta["space_group"] != "P 1"

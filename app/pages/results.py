@@ -32,7 +32,9 @@ def _cif_result_metadata(row: dict) -> dict[str, str | None]:
     """Read the space group and unit-cell labels needed by the results table."""
     run_path = Path(row.get("run_path") or ".")
     source_cif = Path(row.get("cif") or "")
-    candidates = [source_cif, run_path / "inputs" / "crystal" / source_cif.name]
+    # The run's own copy first: it is the file that was calculated, while the
+    # upload or source path may have changed since.
+    candidates = [run_path / "inputs" / "crystal" / source_cif.name, source_cif]
     cif_path = next((p for p in candidates if p.is_file()), None)
     if cif_path is None:
         return {"space_group": "–", "cell_parameters": "–", "formula": None, "cif_path": None}

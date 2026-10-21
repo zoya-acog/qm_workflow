@@ -30,7 +30,7 @@ no nesting for CPU/GPU).
 **Consequence:** a change to `config.example.yaml` or to the script generator changes
 the job scripts;
 `tests/expected/` records the reference scripts for the DeltaHPC example, and the
-script the client's own 0.0.16 wrote; a test checks every line of that one is kept.
+script the original advQMcalc_test 0.0.16 wrote; a test checks every line of that one is kept.
 
 ## How QE runs
 

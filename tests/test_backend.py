@@ -52,15 +52,15 @@ def test_scripts_match_reference_output(tmp_path, monkeypatch, name, kwargs):
     assert text == (EXPECTED / f"{name}.slurm").read_text()
 
 
-def test_client_original_script_is_kept_line_for_line(tmp_path, monkeypatch):
-    # client_0.0.16.slurm was written by the client's own advQMcalc_test 0.0.16 for
+def test_original_script_is_kept_line_for_line(tmp_path, monkeypatch):
+    # original_0.0.16.slurm was written by the original advQMcalc_test 0.0.16 for
     # the same run. Every one of its lines must appear, in order, in the script this
     # version writes for their cluster (quoting of values aside).
     def lines(text):
         return [line.replace('"', "") for line in text.splitlines() if line.strip()]
 
     ours = iter(lines(_script(tmp_path, monkeypatch, site_file=EXAMPLE)))
-    missing = [line for line in lines((EXPECTED / "client_0.0.16.slurm").read_text())
+    missing = [line for line in lines((EXPECTED / "original_0.0.16.slurm").read_text())
                if not any(line == candidate for candidate in ours)]
     assert missing == []
 

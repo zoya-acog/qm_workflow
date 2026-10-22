@@ -591,12 +591,11 @@ def _build_new_run_page(nav: _Nav):
             _ipv_row(xdm_a1_w, xdm_a2_w, ecutwfc_w),
             _ipv_row(ecutrho_w, occupations_w, smearing_w),
             _ipv_row(degauss_w),
-            _ipv_row(submitted_by_w, run_id_w),
         ]
     )
     params_card.add_class("advqm-card")
     params_card.add_class("advqm-card-flat")
-    params_section = _collapsible_section("⚙️ Input Settings", params_card, expanded=True)
+    params_section = _collapsible_section("⚙️ QE Settings", params_card, expanded=True)
 
     slurm_card = widgets.VBox(
         [
@@ -624,6 +623,7 @@ def _build_new_run_page(nav: _Nav):
 
     additional_content = widgets.VBox(
         [
+            _ipv_row(submitted_by_w, run_id_w),
             _ipv_row(runs_dir_w),
             _ipv_row(log_name_w),
             _ipv_row(pp_map_w),
@@ -631,7 +631,8 @@ def _build_new_run_page(nav: _Nav):
     )
     additional_content.add_class("advqm-card")
     additional_content.add_class("advqm-card-flat")
-    additional = _collapsible_section("Additional Settings", additional_content)
+    # Open by default: it holds the required User Name.
+    additional = _collapsible_section("🛠️ Additional Settings", additional_content, expanded=True)
 
     actions = widgets.HBox([sample_btn, run_btn, reset_btn])
 

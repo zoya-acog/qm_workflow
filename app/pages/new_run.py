@@ -100,7 +100,7 @@ def _build_new_run_page(nav: _Nav):
         ],
         v_model="", outlined=True, dense=True, disabled=True,
     )
-    gpus_w = ipv.TextField(label="GPUs (One MPI Rank Each)", v_model="1",
+    gpus_w = ipv.TextField(label="No. of GPUs", v_model="1",
                            outlined=True, dense=True, disabled=True)
 
     def on_gpu_toggle(change) -> None:

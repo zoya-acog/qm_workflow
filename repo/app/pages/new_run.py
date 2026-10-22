@@ -171,7 +171,7 @@ def _build_new_run_page(nav: _Nav):
     })
 
     run_btn = widgets.Button(description="Submit Run", button_style="success", icon="play")
-    reset_btn = widgets.Button(description="Cancel", icon="undo")
+    reset_btn = widgets.Button(description="Reset", icon="undo")
     sample_btn = widgets.Button(description="Try Sample", icon="refresh")
     run_log = widgets.Output()
     attach_log_handler(run_log)
@@ -179,11 +179,12 @@ def _build_new_run_page(nav: _Nav):
     def clear_upload() -> None:
         upload_message.value = ""
         # ipywidgets 7 makes FileUpload.value read-only; clear its synced
-        # metadata/data and bump the counter to reset the browser file input.
+        # metadata/data. The button shows _counter as "Upload (n)", so set it
+        # back to 0 (incrementing it made one sample look like several files).
         if hasattr(upload, "metadata") and hasattr(upload, "data"):
             upload.metadata = []
             upload.data = []
-            upload._counter += 1
+            upload._counter = 0
         else:
             upload.value = ()
 
@@ -232,7 +233,10 @@ def _build_new_run_page(nav: _Nav):
         use_gpu_w.v_model = False
         gpu_type_w.v_model = ""
         gpus_w.v_model = "1"
-        submitted_by_w.v_model = ""
+        # User Name is required: keep a name already typed, else a sample label,
+        # so Submit Run works straight away. Run ID is optional and left empty.
+        if not (submitted_by_w.v_model or "").strip():
+            submitted_by_w.v_model = "sample-user"
         run_id_w.v_model = ""
         vdw_corr_w.v_model = "Grimme-D3"
         for field in (input_dft_w, ecutwfc_w, ecutrho_w, xdm_a1_w, xdm_a2_w,
@@ -481,17 +485,24 @@ def _build_new_run_page(nav: _Nav):
 
         threading.Thread(target=_check, daemon=True).start()
 
+    # Every input with the value the form opened with, for Reset.
+    form_fields = [
+        multi_cif_dir_w, cif_glob_w, calc_type_w, runs_dir_w, log_name_w, kpoints_w,
+        ksep_w, pseudo_dir_w, pp_map_w, walltime_w, ntasks_w, mem_w, maxconc_w,
+        qe_cmd_w, use_gpu_w, gpu_type_w, gpus_w, submitted_by_w, run_id_w,
+        vdw_corr_w, input_dft_w, ecutwfc_w, ecutrho_w, xdm_a1_w, xdm_a2_w,
+        occupations_w, smearing_w, degauss_w,
+    ]
+    initial_values = [(w, w.v_model) for w in form_fields]
+
     def on_reset_clicked(b: widgets.Button) -> None:
+        # Back to the form as first opened: no CIF, every field at its default.
         clear_upload()
         sample_selection["path"] = None
         sample_message.value = ""
         input_tabs.selected_index = 0
-        multi_cif_dir_w.v_model = ""
-        cif_glob_w.v_model = "*.cif"
-        vdw_corr_w.v_model = None
-        for field in (input_dft_w, ecutwfc_w, ecutrho_w, xdm_a1_w, xdm_a2_w,
-                      occupations_w, smearing_w, degauss_w):
-            field.v_model = ""
+        for w, value in initial_values:
+            w.v_model = value
         run_log.clear_output()
         run_log.append_stdout("Ready.\n")
 

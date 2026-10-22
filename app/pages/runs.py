@@ -1,6 +1,7 @@
 """Runs monitoring table with monitor/resume support."""
 
 import html
+import json
 import threading
 import time
 import uuid
@@ -14,6 +15,7 @@ import ipyvuetify as ipv
 
 from helpers import (
     _process_single_cif,
+    _query_slurm_job,
     _reset_failed_job,
     _submit_array_batch,
     build_namespace,
@@ -727,20 +729,44 @@ def _build_runs_page(nav: _Nav):
         except Exception as e:
             _run_log(f"Auto-refresh failed for {r.get('run_id')}: {e}")
 
+    def _recheck_ended(r: dict) -> None:
+        # "ENDED" means the job left the queue while sacct could not be asked,
+        # so its final SLURM state was never recorded. Ask sacct again and
+        # store the real state (COMPLETED, FAILED, ...) when it answers.
+        rp = Path(r["run_path"]) if r.get("run_path") else None
+        if rp is None or not r.get("job_id"):
+            return
+        try:
+            real = _query_slurm_job(r["job_id"])
+        except Exception:
+            return
+        if real in ("ENDED", "UNKNOWN", "PENDING", "RUNNING"):
+            return
+        try:
+            sf = rp / "state.json"
+            st = json.loads(sf.read_text())
+            st["tasks"]["crystal"]["slurm_state"] = real
+            sf.write_text(json.dumps(st, indent=2))
+        except Exception:
+            pass
+
     def refresh_and_resolve_stale(_=None):
         refresh_btn.disabled = True
         refresh_btn.description = "Refreshing…"
         refresh()
         stale = [r for r in current_rows if status_category(r.get("crystal_status")) in ("info", "warning")]
+        ended = [r for r in current_rows if r.get("slurm_state") == "ENDED"]
 
         def work():
+            for r in ended:
+                _recheck_ended(r)
             for r in stale:
                 _resolve_one_stale(r, _base_for(Path(r["run_path"])) if r.get("run_path") else None)
             refresh()
             refresh_btn.disabled = False
             refresh_btn.description = "Refresh"
 
-        if not stale:
+        if not stale and not ended:
             refresh_btn.disabled = False
             refresh_btn.description = "Refresh"
             return

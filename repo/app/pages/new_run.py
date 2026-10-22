@@ -4,6 +4,7 @@ import html
 import json
 import re
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -403,6 +404,30 @@ def _build_new_run_page(nav: _Nav):
         cif_dir_val = (multi_cif_dir_w.v_model or "").strip() if multi else ""
         log_name = common.get("log_name") or "advQMcalc.log"
 
+        def stamp_run(run_dir: Path) -> None:
+            """Record who submitted the run (and its Run ID / folder) in its state,
+            for every run created, including runs that fail during setup."""
+            try:
+                state_file = run_dir / "state.json"
+                state = json.loads(state_file.read_text())
+                state["submitted_by"] = submitted_by or None
+                state["run_label"] = run_label_val or None
+                state["cif_dir"] = cif_dir_val or None
+                state_file.write_text(json.dumps(state, indent=2))
+            except Exception:
+                pass
+
+        def failed_run_dir(runs_dir: Path, cif: Path, since: float) -> Path | None:
+            """The run folder a failed setup created for this CIF (newest one)."""
+            found = []
+            for sf in Path(runs_dir).glob("*/state.json"):
+                try:
+                    if sf.stat().st_mtime >= since and json.loads(sf.read_text()).get("cif") == str(cif):
+                        found.append(sf.parent)
+                except Exception:
+                    continue
+            return max(found, key=lambda d: d.stat().st_mtime) if found else None
+
         def work() -> None:
             _run_log(f"Starting run for {len(staged)} CIF file(s)")
             submitted = 0
@@ -412,13 +437,20 @@ def _build_new_run_page(nav: _Nav):
             for cif in staged:
                 ns = build_namespace(cif=[str(cif)], defer_submit=use_array, **common)
                 runs_dir = _runs_dir_for_cif(base_runs, cif, multi)
+                started = time.time() - 1
                 try:
                     run_dir = _process_single_cif(cif, runs_dir, ns)
                 except Exception as e:
                     failed += 1
+                    rd = failed_run_dir(runs_dir, cif, started)
+                    if rd:
+                        stamp_run(rd)
                     _run_log(f"Run failed for {cif.name}: {e}")
                     continue
                 if run_dir is None:
+                    rd = failed_run_dir(runs_dir, cif, started)
+                    if rd:
+                        stamp_run(rd)
                     failed += 1
                     _run_log(
                         f"Run failed for {cif.name} before SLURM submission; "
@@ -452,17 +484,9 @@ def _build_new_run_page(nav: _Nav):
             for cif, run_dir in prepared:
                 st = load_run_state(run_dir)
                 crystal = (st or {}).get("tasks", {}).get("crystal", {})
+                stamp_run(run_dir)
                 if crystal.get("job_id"):
                     submitted += 1
-                    try:
-                        state_file = run_dir / "state.json"
-                        state = json.loads(state_file.read_text())
-                        state["submitted_by"] = submitted_by or None
-                        state["run_label"] = run_label_val or None
-                        state["cif_dir"] = cif_dir_val or None
-                        state_file.write_text(json.dumps(state, indent=2))
-                    except Exception:
-                        pass
                 else:
                     failed += 1
                     err = _last_run_error(run_dir, log_name)

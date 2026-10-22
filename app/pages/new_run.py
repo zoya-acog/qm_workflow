@@ -185,6 +185,7 @@ def _build_new_run_page(nav: _Nav):
             upload.metadata = []
             upload.data = []
             upload._counter = 0
+            upload.description = "Upload"  # the counter change set it to "Upload (0)"
         else:
             upload.value = ()
 
@@ -212,7 +213,9 @@ def _build_new_run_page(nav: _Nav):
         clear_upload()
         sample_selection["path"] = sample_cif if sample_cif.is_file() else None
         sample_message.value = (
-            f'<span class="advqm-muted">Using built-in sample: {sample_cif.name}</span>'
+            # Shown like an uploaded file: green tick and the file name.
+            '<span style="color:#2e7d32; font-weight:600;">&#10004; '
+            f'{html.escape(sample_cif.name)}</span> <span class="advqm-muted">(built-in sample)</span>'
             if sample_selection["path"] else
             '<span class="advqm-badge advqm-badge-danger">Sample CIF is missing</span>'
         )

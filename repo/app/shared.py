@@ -244,19 +244,19 @@ def cif_list_text(names: list[str], compact: bool = False) -> str:
 
 
 def batch_status_text(rows: list[dict]) -> str:
-    cats = [status_category(r.get("crystal_status")) for r in rows]
+    cats = [effective_status(r)[1] for r in rows]
     n = len(rows)
     done, failed = cats.count("success"), cats.count("danger")
     running = n - done - failed
     if done == n:
-        return f"Finished ({done}/{n})"
+        return f"Completed ({done}/{n})"
     if failed == n:
         return f"Failed ({failed}/{n})"
     parts = []
     if running:
         parts.append(f"{running} In Progress")
     if done:
-        parts.append(f"{done} Finished")
+        parts.append(f"{done} Completed")
     if failed:
         parts.append(f"{failed} Failed")
     return ", ".join(parts)
@@ -264,12 +264,11 @@ def batch_status_text(rows: list[dict]) -> str:
 
 def batch_status_html(rows: list[dict]) -> str:
     """Batch status as one coloured pill per state, stacked, e.g.
-    "Finished (1/3)" with "Pending (2/3)" below it."""
+    "Completed (1/3)" with "Pending (2/3)" below it."""
     n = len(rows)
     counts: dict[tuple[str, str], int] = {}
     for r in rows:
-        key = (r.get("crystal_status") or "").lower()
-        label, css = _STATUS_MAP.get(key, ((r.get("crystal_status") or "Unknown").replace("_", " ").title(), "neutral"))
+        label, css = effective_status(r)
         counts[(label, css)] = counts.get((label, css), 0) + 1
     order = {"success": 0, "info": 1, "warning": 2, "danger": 3, "neutral": 4}
     pills = "".join(
@@ -442,46 +441,44 @@ def _list_all_run_rows(base: Path, only_successful: bool = False) -> list[dict]:
     return rows
 
 
-def _effective_status_html(r: dict) -> str:
-    """Status badge, distinguishing a genuine SCF non-convergence from a
-    generic failure. QE reports this in the .out text as "convergence NOT
-    achieved" — the backend's status field lumps it into the same generic
-    "failed" bucket as everything else (qe_failed_validation), so this
-    frontend-only check re-inspects the actual output for the specific
-    marker rather than needing a cli.py change to add a new status value.
+def effective_status(r: dict) -> tuple[str, str]:
+    """(label, category) of a run as the user should see it.
 
-    QE has a hard default limit on SCF steps (electron_maxstep); a run that
-    hits it isn't necessarily wrong, it may just need more iterations — for
-    now this is surfaced as a distinct status so it's not confused with a
-    real error, but resubmitting with a higher step count or extending from
-    the last SCF step isn't wired up in the UI yet.
+    Beyond the saved status: a run with no SLURM job whose log records an error
+    failed during setup ("Setup Failed"), and a failed QE run whose output says
+    "convergence NOT achieved" is reported as "Convergence Failed".
     """
     status = r.get("crystal_status")
     if not r.get("job_id") and status_category(status) in ("warning", "neutral"):
-        # No SLURM job was ever submitted for this run — if its log records
-        # an ERROR, it failed during setup (not Pending on SLURM).
         run_path = r.get("run_path")
         if run_path:
             try:
-                err = _last_run_error(Path(run_path))
+                if _last_run_error(Path(run_path)):
+                    return "Setup Failed", "danger"
             except Exception:
-                err = None
-            if err:
-                title = html.escape(err)
-                return (
-                    '<span class="advqm-badge advqm-badge-danger" '
-                    f'title="{title}">Setup Failed</span>'
-                )
+                pass
     if status_category(status) == "danger":
         out_file = r.get("qe_output_file")
         if out_file:
             try:
-                text = Path(out_file).read_text(errors="ignore")
-                if "convergence NOT achieved" in text:
-                    return '<span class="advqm-badge advqm-badge-danger">Convergence Failed</span>'
+                if "convergence NOT achieved" in Path(out_file).read_text(errors="ignore"):
+                    return "Convergence Failed", "danger"
             except Exception:
                 pass
-    return status_badge_html(status)
+    key = (status or "").lower()
+    return _STATUS_MAP.get(key, ((status or "Unknown").replace("_", " ").title(), "neutral"))
+
+
+def _effective_status_html(r: dict) -> str:
+    """Status badge for one run (see effective_status); a setup failure shows
+    its error on hover."""
+    label, css = effective_status(r)
+    if label == "Setup Failed":
+        err = _last_run_error(Path(r["run_path"])) or ""
+        return f'<span class="advqm-badge advqm-badge-danger" title="{html.escape(err)}">Setup Failed</span>'
+    if label == "Convergence Failed":
+        return '<span class="advqm-badge advqm-badge-danger">Convergence Failed</span>'
+    return status_badge_html(r.get("crystal_status"))
 
 
 def _last_run_error(run_dir: Path, log_name: str = "advQMcalc.log") -> str | None:

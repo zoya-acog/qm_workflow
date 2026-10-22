@@ -494,7 +494,7 @@ def build_app_header() -> str:
 
 
 _STATUS_MAP = {
-    "qe_energy_extracted": ("Finished", "success"),
+    "qe_energy_extracted": ("Completed", "success"),
     "running": ("Running", "info"),
     "completed": ("Completed", "info"),
     "qe_completed": ("Completed", "info"),

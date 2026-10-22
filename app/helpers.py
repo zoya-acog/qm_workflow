@@ -423,6 +423,10 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 .advqm-rowlist.advqm-rowlist-scroll { max-height:70vh; overflow:auto !important; }
 .advqm-rowlist.advqm-rowlist-scroll > * { flex:0 0 auto !important; }
 .advqm-sticky-head { position:sticky; top:0; z-index:5; background:#fafbfc; }
+/* Table headers do not clip: an info icon's hover text can extend below the
+   header over the first rows (the sticky header is drawn above the rows). */
+.advqm-results-headrow, .advqm-results-headrow *, .advqm-rowlist-head, .advqm-rowlist-head * {
+    overflow:visible !important; }
 .advqm-rowlist-head { display:flex; align-items:center; box-sizing:border-box;
     padding:12px 16px; font-size:0.9rem; font-weight:700; color:#667085;
     letter-spacing:0.02em; border-bottom:1px solid #e5e9f0;

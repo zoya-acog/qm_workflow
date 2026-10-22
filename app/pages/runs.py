@@ -689,6 +689,8 @@ def _build_runs_page(nav: _Nav):
             st = load_run_state(Path(r["run_path"])) if r.get("run_path") else None
             r["calc_type"] = (st or {}).get("calc_type")
             r["submitted_by"] = (st or {}).get("submitted_by") or None
+        # Newest first: run folder names are timestamps (YYYY-MM-DD_HHMMSS).
+        rows.sort(key=lambda r: r.get("run_id") or "", reverse=True)
         current_rows = rows
         _refresh_user_filter()
         render_rows()

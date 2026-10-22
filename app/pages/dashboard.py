@@ -6,7 +6,6 @@ from pathlib import Path
 import ipywidgets as widgets
 from IPython.display import HTML, display
 
-from helpers import status_category
 from shared import (
     DEFAULT_RUNS_DIR,
     _Nav,
@@ -16,6 +15,7 @@ from shared import (
     group_rows,
     _effective_status_html,
     _fmt,
+    effective_status,
     list_rows_all_dirs,
 )
 
@@ -37,9 +37,11 @@ def _build_dashboard_page(nav: _Nav):
         stats_out.clear_output()
         recent_out.clear_output()
         rows = list_rows_all_dirs()
-        n_success = sum(status_category(r.get("crystal_status")) == "success" for r in rows)
-        n_progress = sum(status_category(r.get("crystal_status")) in ("info", "warning") for r in rows)
-        n_failed = sum(status_category(r.get("crystal_status")) == "danger" for r in rows)
+        # Same status as the Runs page shows (setup failures count as failed).
+        cats = [effective_status(r)[1] for r in rows]
+        n_success = cats.count("success")
+        n_progress = sum(c in ("info", "warning") for c in cats)
+        n_failed = cats.count("danger")
 
         with stats_out:
             display(HTML(f"""

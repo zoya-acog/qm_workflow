@@ -445,7 +445,7 @@ def effective_status(r: dict) -> tuple[str, str]:
     """(label, category) of a run as the user should see it.
 
     Beyond the saved status: a run with no SLURM job whose log records an error
-    failed during setup ("Setup Failed"), and a failed QE run whose output says
+    failed during setup (shown as "Failed"), and a failed QE run whose output says
     "convergence NOT achieved" is reported as "Convergence Failed".
     """
     status = r.get("crystal_status")
@@ -454,7 +454,7 @@ def effective_status(r: dict) -> tuple[str, str]:
         if run_path:
             try:
                 if _last_run_error(Path(run_path)):
-                    return "Setup Failed", "danger"
+                    return "Failed", "danger"
             except Exception:
                 pass
     if status_category(status) == "danger":
@@ -473,9 +473,9 @@ def _effective_status_html(r: dict) -> str:
     """Status badge for one run (see effective_status); a setup failure shows
     its error on hover."""
     label, css = effective_status(r)
-    if label == "Setup Failed":
+    if label == "Failed" and not r.get("job_id") and r.get("run_path"):
         err = _last_run_error(Path(r["run_path"])) or ""
-        return f'<span class="advqm-badge advqm-badge-danger" title="{html.escape(err)}">Setup Failed</span>'
+        return f'<span class="advqm-badge advqm-badge-danger" title="{html.escape(err)}">Failed</span>'
     if label == "Convergence Failed":
         return '<span class="advqm-badge advqm-badge-danger">Convergence Failed</span>'
     return status_badge_html(r.get("crystal_status"))

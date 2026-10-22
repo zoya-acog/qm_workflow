@@ -487,7 +487,7 @@ def build_app_header() -> str:
          alt="Pfizer" style="height:28px; max-width:100px;">
   </div>
   <div class="advqm-titlebar">
-    <span class="advqm-title">QM Workflow for Crystal Systems (WIP)</span>
+    <span class="advqm-title">QM Workflow for Crystal Systems</span>
   </div>
 </div>
 """

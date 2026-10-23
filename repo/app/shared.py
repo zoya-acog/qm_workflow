@@ -1,6 +1,7 @@
 """Shared UI state, formatting, and run-row helpers (imported by every page)."""
 
 import base64
+import fcntl
 import html
 import io
 import json
@@ -8,12 +9,22 @@ import logging
 import re
 import subprocess
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 import ipywidgets as widgets
 import ipyvuetify as ipv
 
-from helpers import _STATUS_MAP, status_badge_html, status_category
+from helpers import (
+    _STATUS_MAP,
+    _process_single_cif,
+    _query_slurm_job,
+    build_namespace,
+    load_run_state,
+    resume_target,
+    status_badge_html,
+    status_category,
+)
 
 from advQMcalc_test.site_config import SITE
 
@@ -67,6 +78,111 @@ _SYSTEM_PARAM_KEYS = (
 
 def _run_log(msg: str) -> None:
     logging.getLogger("advQMcalc_test").info(msg)
+
+
+def runs_base_for(run_path: Path) -> Path:
+    """The runs folder a run lives under."""
+    rp = Path(run_path).resolve()
+    for d in known_runs_dirs():
+        try:
+            if d.resolve() in rp.parents:
+                return d
+        except OSError:
+            continue
+    return Path(DEFAULT_RUNS_DIR)
+
+
+def needs_slurm_check(run_path: Path) -> bool:
+    """True for a run that was submitted to SLURM but whose final result is not
+    saved yet (pending, running, or finished but not processed), or that is
+    marked ENDED (finished while sacct could not be asked). Runs that never
+    reached SLURM are left alone: re-checking them would only repeat a setup
+    that already failed."""
+    crystal = (load_run_state(Path(run_path)) or {}).get("tasks", {}).get("crystal", {})
+    if not crystal.get("job_id"):
+        return False
+    return (crystal.get("slurm_state") == "ENDED"
+            or status_category(crystal.get("status")) in ("info", "warning"))
+
+
+@contextmanager
+def _run_lock(run_path: Path):
+    """Yields True when this process may update the run, False when another
+    refresh (another page or another user) is updating it right now."""
+    try:
+        f = open(Path(run_path) / ".refresh.lock", "w")
+    except OSError:
+        yield False
+        return
+    try:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            yield False
+            return
+        yield True
+    finally:
+        f.close()
+
+
+def _recheck_ended(rp: Path, crystal: dict) -> None:
+    # "ENDED" means the job left the queue while sacct could not be asked, so
+    # its final SLURM state was never recorded. Ask sacct again and store the
+    # real state (COMPLETED, FAILED, ...) when it answers.
+    try:
+        real = _query_slurm_job(crystal["job_id"])
+    except Exception:
+        return
+    if real in ("ENDED", "UNKNOWN", "PENDING", "RUNNING"):
+        return
+    try:
+        sf = rp / "state.json"
+        st = json.loads(sf.read_text())
+        st["tasks"]["crystal"]["slurm_state"] = real
+        sf.write_text(json.dumps(st, indent=2))
+    except Exception:
+        pass
+
+
+def _monitor_run(rp: Path, st: dict) -> None:
+    # The same resume logic as the Resume button, used only to monitor: it asks
+    # SLURM for the job state and, once the job has finished, validates the QE
+    # output and extracts the energy. It never submits anything.
+    crystal = st.get("tasks", {}).get("crystal", {})
+    runs_dir, run_id = resume_target(runs_base_for(rp), rp.parent.name, rp)
+    ns = build_namespace(
+        resume=True, run_id=run_id, run_path=None, runs_dir=str(runs_dir),
+        calc_type=st.get("calc_type") or "scf", kpoints=crystal.get("kpoints"),
+        pseudo_dir=crystal.get("pseudo_dir"),
+        pp_map=None,
+        force_pp_cleanup=False,
+        defer_submit=True,
+        **{key: (crystal.get("system_params") or {}).get(key)
+           for key in _SYSTEM_PARAM_KEYS},
+    )
+    _process_single_cif(rp, runs_dir, ns)
+
+
+def refresh_run_statuses(run_paths: list[Path]) -> None:
+    """Ask SLURM for the current state of the given runs and save it (used by
+    Refresh on the Dashboard and Runs pages, and when a run is opened). Runs
+    are checked one at a time; a run another refresh is already updating is
+    skipped."""
+    for rp in map(Path, run_paths):
+        if not needs_slurm_check(rp):
+            continue
+        with _run_lock(rp) as ok:
+            if not ok:
+                continue
+            st = load_run_state(rp) or {}
+            crystal = st.get("tasks", {}).get("crystal", {})
+            try:
+                if crystal.get("slurm_state") == "ENDED":
+                    _recheck_ended(rp, crystal)
+                if status_category(crystal.get("status")) in ("info", "warning"):
+                    _monitor_run(rp, st)
+            except Exception as e:
+                _run_log(f"Status refresh failed for {rp.name}: {e}")
 
 
 class _Nav:

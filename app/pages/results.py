@@ -563,7 +563,7 @@ def _build_results_page(nav: _Nav, preselect_row: dict | None = None):
         # and the results load when Done is clicked.
         selection["labels"] = list(change["new"] or [])
 
-    done_btn = ipv.Btn(children=["Done"], color="primary", small=True, depressed=True,
+    done_btn = ipv.Btn(children=["Load Results"], color="primary", small=True, depressed=True,
                        disabled=not completed_rows, class_="advqm-done-btn")
     done_btn.on_event("click", lambda *_: render_comparison())
 

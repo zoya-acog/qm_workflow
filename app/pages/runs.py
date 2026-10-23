@@ -1,7 +1,6 @@
 """Runs monitoring table with monitor/resume support."""
 
 import html
-import json
 import threading
 import time
 import uuid
@@ -15,7 +14,6 @@ import ipyvuetify as ipv
 
 from helpers import (
     _process_single_cif,
-    _query_slurm_job,
     _reset_failed_job,
     _submit_array_batch,
     build_namespace,
@@ -24,6 +22,9 @@ from helpers import (
     status_category,
 )
 from shared import (
+    needs_slurm_check,
+    refresh_run_statuses,
+    runs_base_for,
     CALC_TYPE_HELP,
     info_icon_html,
     CALC_TYPE_LABELS,
@@ -469,19 +470,14 @@ def _build_runs_page(nav: _Nav):
     def _auto_check(paths: list[Path]) -> None:
         """Opening a run (⚙) checks SLURM for its unfinished runs and saves the
         result, like Refresh does but for just these runs (never submits)."""
-        unfinished = [
-            rp for rp in paths
-            if status_category(((load_run_state(rp) or {}).get("tasks", {})
-                                .get("crystal", {})).get("status")) in ("info", "warning")
-        ]
+        unfinished = [rp for rp in paths if needs_slurm_check(rp)]
         if not unfinished:
             return
         job_status.value = "Checking SLURM status…"
 
         def work() -> None:
             try:
-                for rp in unfinished:
-                    _resolve_one_stale({"run_path": str(rp), "run_id": rp.name}, _base_for(rp))
+                refresh_run_statuses(unfinished)
             finally:
                 job_status.value = ""
                 show_state()
@@ -496,14 +492,7 @@ def _build_runs_page(nav: _Nav):
 
     def _base_for(rp: Path) -> Path:
         """The runs folder a given run lives under."""
-        rp_res = Path(rp).resolve()
-        for d in _scan_dirs():
-            try:
-                if d.resolve() in rp_res.parents:
-                    return d
-            except OSError:
-                continue
-        return Path(DEFAULT_RUNS_DIR)
+        return runs_base_for(rp)
 
     def _resume_one(rp: Path, mode: str, force_pp: bool) -> None:
         label = rp.parent.name
@@ -697,76 +686,22 @@ def _build_runs_page(nav: _Nav):
         _refresh_user_filter()
         render_rows()
 
-    def _resolve_one_stale(r: dict, base: Path) -> None:
-        # Re-checks the SLURM status of unfinished runs in the background; the
-        # stored status is only updated when a run is checked.
-        rp = Path(r["run_path"]) if r.get("run_path") else None
-        if rp is None:
-            return
-        label = rp.parent.name
-        try:
-            runs_dir, run_id = resume_target(base, label, rp)
-        except Exception:
-            return
-        st = load_run_state(rp) or {}
-        crystal = st.get("tasks", {}).get("crystal", {})
-        kpoints = crystal.get("kpoints")
-        ns = build_namespace(
-            resume=True, run_id=run_id, run_path=None, runs_dir=str(runs_dir),
-            calc_type=st.get("calc_type") or "scf", kpoints=kpoints,
-            pseudo_dir=crystal.get("pseudo_dir"),
-            pp_map=None,
-            force_pp_cleanup=False,
-            # Refresh only monitors. Runs that are prepared but not yet submitted
-            # (waiting for their batch's SLURM array) must not be sent to SLURM
-            # one by one here.
-            defer_submit=True,
-            **{key: (crystal.get("system_params") or {}).get(key)
-               for key in _SYSTEM_PARAM_KEYS},
-        )
-        try:
-            _process_single_cif(rp, runs_dir, ns)
-        except Exception as e:
-            _run_log(f"Auto-refresh failed for {r.get('run_id')}: {e}")
-
-    def _recheck_ended(r: dict) -> None:
-        # "ENDED" means the job left the queue while sacct could not be asked,
-        # so its final SLURM state was never recorded. Ask sacct again and
-        # store the real state (COMPLETED, FAILED, ...) when it answers.
-        rp = Path(r["run_path"]) if r.get("run_path") else None
-        if rp is None or not r.get("job_id"):
-            return
-        try:
-            real = _query_slurm_job(r["job_id"])
-        except Exception:
-            return
-        if real in ("ENDED", "UNKNOWN", "PENDING", "RUNNING"):
-            return
-        try:
-            sf = rp / "state.json"
-            st = json.loads(sf.read_text())
-            st["tasks"]["crystal"]["slurm_state"] = real
-            sf.write_text(json.dumps(st, indent=2))
-        except Exception:
-            pass
-
     def refresh_and_resolve_stale(_=None):
         refresh_btn.disabled = True
         refresh_btn.description = "Refreshing…"
         refresh()
-        stale = [r for r in current_rows if status_category(r.get("crystal_status")) in ("info", "warning")]
-        ended = [r for r in current_rows if r.get("slurm_state") == "ENDED"]
+        to_check = [Path(r["run_path"]) for r in current_rows
+                    if r.get("run_path") and needs_slurm_check(Path(r["run_path"]))]
 
         def work():
-            for r in ended:
-                _recheck_ended(r)
-            for r in stale:
-                _resolve_one_stale(r, _base_for(Path(r["run_path"])) if r.get("run_path") else None)
-            refresh()
-            refresh_btn.disabled = False
-            refresh_btn.description = "Refresh"
+            try:
+                refresh_run_statuses(to_check)
+                refresh()
+            finally:
+                refresh_btn.disabled = False
+                refresh_btn.description = "Refresh"
 
-        if not stale and not ended:
+        if not to_check:
             refresh_btn.disabled = False
             refresh_btn.description = "Refresh"
             return

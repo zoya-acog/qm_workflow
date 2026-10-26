@@ -77,7 +77,7 @@ identical to before.
 
 **New Calculation → SLURM Configuration**
 
-- New field **GPU Sharing** next to No. of GPUs: *Shared GPU (recommended)* or
+- New field **GPU Sharing** next to No. of GPUs: *Shared GPU* or
   *Whole GPU*, with an info icon explaining both.
 - Shown only when the site config sets `gpu.shard`; enabled only when Use GPU
   is ticked.

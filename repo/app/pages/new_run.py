@@ -115,7 +115,7 @@ def _build_new_run_page(nav: _Nav):
         site_shard = None
     gpu_share_w = ipv.Select(
         label="GPU Sharing",
-        items=[{"text": "Shared GPU (recommended)", "value": "shared"},
+        items=[{"text": "Shared GPU", "value": "shared"},
                {"text": "Whole GPU", "value": "whole"}],
         v_model="shared" if site_shard else "whole",
         outlined=True, dense=True, disabled=True,

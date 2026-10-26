@@ -604,12 +604,17 @@ def run_log_file(run_path: Path) -> Path | None:
     return found[-1] if found else None
 
 
-def condensed_run_log(text: str) -> list[str]:
-    """The run log without the routine part of status checks: each check
-    (a "Resuming run in" block) keeps only a status change, a result, a warning
-    or an error. Everything else is kept as written."""
+def condensed_run_log(text: str, run_path: Path | None = None,
+                      job_ids: tuple = ()) -> list[str]:
+    """The run log without noise. Blocks that belong to other runs (older app
+    versions wrote them into every open run's log) are dropped, and in this
+    run's status checks ("Resuming run in" blocks) only a status change, a
+    result, a warning or an error is kept. Lines outside any block are kept
+    only when they name one of job_ids (e.g. the batch's array submission)."""
+    own = str(Path(run_path).resolve()) if run_path else None
     out: list[str] = []
-    in_check, keep, status = False, True, None
+    block = None       # None: outside a block; else "own-new", "own-check" or "other"
+    keep, status = False, None
     for line in text.splitlines():
         m = _LOG_LINE.match(line)
         if not m:  # continuation of a multi-line message
@@ -617,25 +622,34 @@ def condensed_run_log(text: str) -> list[str]:
                 out.append(line)
             continue
         level, msg = m.groups()
-        if msg.startswith("Resuming run in:"):
-            in_check, keep = True, False
-            continue
-        st = re.search(r"Crystal job \S+ status: (\w+)", msg)
-        if not in_check:
-            keep = True
-            if st:
-                status = st.group(1)
-        elif msg.startswith("Workflow step complete"):
-            in_check, keep = False, False
-        elif level in ("WARNING", "ERROR"):
-            keep = True
-        elif st:
-            keep = st.group(1) != status
-            status = st.group(1)
+        start = re.match(r"(Run directory created|Resuming run in): (.*)$", msg)
+        if start:
+            mine = own is None or str(Path(start.group(2).strip()).resolve()) == own
+            block = ("own-new" if start.group(1).startswith("Run") else "own-check") if mine else "other"
+            keep = block == "own-new"
+        elif block is None:
+            keep = own is None or any(j and str(j) in msg for j in job_ids)
+        elif block == "other":
+            keep = False
         else:
-            keep = not _ROUTINE_LOG.search(msg)
+            st = re.search(r"Crystal job \S+ status: (\w+)", msg)
+            if block == "own-new":
+                keep = True
+                if st:
+                    status = st.group(1)
+            elif level in ("WARNING", "ERROR"):
+                keep = True
+            elif st:
+                keep = st.group(1) != status
+                status = st.group(1)
+            else:
+                keep = not _ROUTINE_LOG.search(msg)
+            if block == "own-check" and msg.startswith("Workflow step complete"):
+                keep = False
         if keep:
             out.append(line)
+        if msg.startswith("Workflow step complete"):
+            block = None
     return out
 
 
@@ -646,7 +660,9 @@ def run_log_html(run_path: Path, max_lines: int = 200) -> str:
     if f is None:
         return '<div class="advqm-muted">No log file in this run folder yet.</div>'
     try:
-        lines = condensed_run_log(f.read_text(errors="replace"))
+        crystal = (load_run_state(Path(run_path)) or {}).get("tasks", {}).get("crystal", {})
+        ids = tuple(str(crystal[k]) for k in ("array_job_id", "job_id") if crystal.get(k))
+        lines = condensed_run_log(f.read_text(errors="replace"), run_path, ids)
     except OSError as e:
         return f'<div class="advqm-muted">Cannot read {html.escape(str(f))}: {html.escape(str(e))}</div>'
     shown = lines[-max_lines:]

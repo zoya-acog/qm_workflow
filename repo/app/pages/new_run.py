@@ -230,9 +230,6 @@ def _build_new_run_page(nav: _Nav):
     run_msg = widgets.HTML()
     run_msg.add_class("advqm-submit-msg")
     msg_lines: list[str] = []
-    go_runs_btn = widgets.Button(description="Go to Runs", icon="list",
-                                 layout=widgets.Layout(display="none"))
-    go_runs_btn.on_click(lambda _: nav.show("runs"))
 
     def _say(msg: str, css: str = "") -> None:
         text = html.escape(msg, quote=False)
@@ -270,7 +267,6 @@ def _build_new_run_page(nav: _Nav):
     def _clear_msgs() -> None:
         msg_lines.clear()
         run_msg.value = ""
-        go_runs_btn.layout.display = "none"
 
     def _first_line(err) -> str:
         line = next((ln.strip() for ln in str(err).splitlines() if ln.strip()), str(err))
@@ -588,15 +584,10 @@ def _build_new_run_page(nav: _Nav):
                     err = _last_run_error(run_dir, log_name)
                     failures.append(f"{cif.name}: {_first_line(err) if err else 'not submitted to SLURM'}")
 
-            if submitted:
-                _say(f"✔ Submitted {submitted} run(s) as SLURM job {', '.join(job_ids)}.", "ok")
             for f in failures:
                 _say(f"✖ {f}", "err")
             if not submitted:
                 _say("Nothing was submitted.", "err")
-            _say("The log of this submission is below. Track your runs on the Runs page: "
-                 "click the ⚙ icon on a run to open Monitor.")
-            go_runs_btn.layout.display = ""
             if submitted:
                 return f"✔ job {', '.join(job_ids)}" + (f", {len(failures)} failed" if failures else "")
             return "✖ not submitted"
@@ -762,6 +753,6 @@ def _build_new_run_page(nav: _Nav):
     actions = widgets.HBox([sample_btn, run_btn, reset_btn])
 
     return widgets.VBox(
-        [header, upload_section, params_section, additional, slurm_section, actions, run_msg, go_runs_btn, log_box]
+        [header, upload_section, params_section, additional, slurm_section, actions, run_msg, log_box]
     )
 

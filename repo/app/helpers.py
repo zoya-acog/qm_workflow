@@ -394,13 +394,6 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 .widget-upload { border:1.5px dashed #c3cbd6; border-radius:8px; background:#fafbfc; }
 /* No box of its own: the Single CIF File tab already frames the upload area. */
 .advqm-file-panel { padding:6px 2px; gap:10px; }
-/* Monitor: status | log, side by side (stacked when narrow). Both columns may
-   shrink below their content width, so nothing runs past the right edge. */
-.advqm-monitor-col { flex:1 1 0 !important; min-width:320px !important; max-width:100%;
-    box-sizing:border-box; padding:0 8px; overflow:hidden; }
-.advqm-monitor-col > * { max-width:100% !important; box-sizing:border-box; }
-.advqm-monitor-col .widget-html-content { white-space:normal !important; }
-.advqm-monitor-col .widget-dropdown { width:100% !important; }
 .advqm-log { display:flex; flex-direction:column-reverse; max-height:420px; overflow:auto;
     border:1px solid #e1e5eb; border-radius:6px; background:#f8f9fb; margin-top:6px; }
 .advqm-log pre { margin:0; padding:8px 10px; white-space:pre-wrap; overflow-wrap:anywhere;

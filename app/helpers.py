@@ -1,6 +1,7 @@
 import sys
 import argparse
 import logging
+import re
 import threading
 import uuid
 from datetime import datetime
@@ -116,6 +117,75 @@ def attach_log_handler(output) -> WidgetLogHandler:
     )
     logger.addHandler(handler)
     return handler
+
+
+_HM_TAG = re.compile(r"\s*_(space_group_name_H-M_alt|symmetry_space_group_name_H-M)\b(.*)")
+
+
+def safe_cif_name(name: str) -> str:
+    """CIF file name the pipeline can use: letters, digits, '_' and '-' only.
+    Spaces break the SLURM job script (#SBATCH --job-name/--output values)."""
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "_", Path(name).stem)
+    stem = re.sub(r"_+", "_", stem).strip("_") or "structure"
+    return f"{stem}.cif"
+
+
+def fix_hm_symbol(text: str) -> tuple[str, tuple[str, str] | None]:
+    """Write screw axes in the CIF's Hermann-Mauguin space-group name without
+    the underscore ('P 1 2_1/c 1' -> 'P 1 21/c 1'): cif2cell rejects the
+    underscore form ("Unknown H-M symbol"). Same space group, other notation.
+    Returns the new text and (old, new) value, or None when nothing changed."""
+    lines = text.splitlines(keepends=True)
+    for i, line in enumerate(lines):
+        m = _HM_TAG.match(line)
+        if not m:
+            continue
+        j = i if m.group(2).strip() else i + 1  # value on the tag line or the next
+        if j >= len(lines):
+            break
+        new = re.sub(r"(\d)_(\d)", r"\1\2", lines[j])
+        if new == lines[j]:
+            break
+        value = lambda ln: (ln[m.end(1) + 1:] if j == i else ln).strip().strip("'\"")
+        old_value, new_value = value(lines[j]), value(new)
+        lines[j] = new
+        return "".join(lines), (old_value, new_value)
+    return text, None
+
+
+def prepare_cifs(paths: list[Path], staging_dir: Path) -> tuple[list[Path], list[str]]:
+    """Make CIF files ready for the pipeline without changing the originals:
+    a file whose name has spaces or special characters, or whose space-group
+    name cif2cell cannot read, is copied (renamed / corrected) into a new
+    subfolder of staging_dir. Other files are used as they are.
+    Returns the paths to run and a note for each change."""
+    out: list[Path] = []
+    notes: list[str] = []
+    used: set[str] = set()
+    target_dir: Path | None = None
+    for src in map(Path, paths):
+        name = safe_cif_name(src.name)
+        stem, k = Path(name).stem, 2
+        while name.lower() in used:  # two files mapping to the same safe name
+            name, k = f"{stem}_{k}.cif", k + 1
+        used.add(name.lower())
+        # latin-1 maps every byte to a character, so unchanged bytes are kept exactly.
+        text, hm = fix_hm_symbol(src.read_bytes().decode("latin-1"))
+        if name == src.name and hm is None:
+            out.append(src)
+            continue
+        if target_dir is None:
+            target_dir = staging_dir / f"{datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:8]}"
+            target_dir.mkdir(parents=True, exist_ok=False)
+        dest = target_dir / name
+        dest.write_bytes(text.encode("latin-1"))
+        if name != src.name:
+            notes.append(f"Renamed '{src.name}' to '{name}' for processing "
+                         "(file names may only contain letters, digits, '_' and '-').")
+        if hm:
+            notes.append(f"{name}: space group '{hm[0]}' written as '{hm[1]}' so cif2cell can read it.")
+        out.append(dest)
+    return out, notes
 
 
 def save_uploads(upload_widget, staging_dir: Path) -> list[Path]:
@@ -538,6 +608,7 @@ __all__ = [
     "build_namespace",
     "attach_log_handler",
     "save_uploads",
+    "prepare_cifs",
     "run_in_thread",
     "enumerate_runs",
     "load_run_state",

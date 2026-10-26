@@ -22,6 +22,7 @@ from helpers import (
     status_category,
 )
 from shared import (
+    run_log_html,
     needs_slurm_check,
     refresh_run_statuses,
     runs_base_for,
@@ -370,6 +371,8 @@ def _build_runs_page(nav: _Nav):
         "files of the selected job to resume.</span>"
     )
     state_out = widgets.HTML()
+    log_pick_w = widgets.Dropdown(options=[], description="CIF", layout=widgets.Layout(width="100%"))
+    log_out = widgets.HTML()
 
     def _cif_name_of(cif) -> str:
         return Path(cif or "?").name
@@ -415,6 +418,11 @@ def _build_runs_page(nav: _Nav):
                 name = f"{name} ({p.name})"
             job_runs[name] = p
         _rebuild_cif_checks(job_runs)
+        # Log panel: one run at a time; a batch picks the CIF from a list.
+        options = [(name, str(p)) for name, p in sorted(job_runs.items(), key=lambda kv: kv[0].lower())]
+        log_pick_w.options = options
+        log_pick_w.layout.display = "" if len(options) > 1 else "none"
+        log_pick_w.value = str(selected_run["path"]) if any(v == str(selected_run["path"]) for _, v in options) else (options[0][1] if options else None)
         show_state()
 
     def show_state(_=None):
@@ -422,6 +430,10 @@ def _build_runs_page(nav: _Nav):
         # Plain HTML value (not an Output widget), so the auto status check can
         # redraw it safely from its background thread.
         state_out.value = "".join(_one_state_html(rp, header=len(paths) > 1) for rp in paths)
+        show_log()
+
+    def show_log(*_):
+        log_out.value = run_log_html(Path(log_pick_w.value)) if log_pick_w.value else ""
 
     def _one_state_html(rp, header=False) -> str:
         st = load_run_state(rp)
@@ -587,7 +599,19 @@ def _build_runs_page(nav: _Nav):
     resume_btn.on_click(on_resume)
 
     # Monitor only: run details + automatic SLURM status check (no Resume controls).
-    monitor_body = widgets.VBox([selected_label_w, job_status, state_out])
+    log_pick_w.observe(show_log, names="value")
+    monitor_status = widgets.VBox([selected_label_w, job_status, state_out])
+    monitor_status.add_class("advqm-monitor-col")
+    monitor_log = widgets.VBox([
+        widgets.HTML('<div style="font-weight:600;">Log</div>'
+                     '<div class="advqm-muted">Routine status checks are hidden; '
+                     'the Logs download in the table has the full file.</div>'),
+        log_pick_w, log_out,
+    ])
+    monitor_log.add_class("advqm-monitor-col")
+    # Side by side; stacks when the window is too narrow for both.
+    monitor_body = widgets.HBox([monitor_status, monitor_log],
+                                layout=widgets.Layout(flex_flow="row wrap", width="100%"))
     monitor_acc = widgets.Accordion(children=[monitor_body])
     monitor_acc.set_title(0, "Monitor")
     monitor_acc.selected_index = None

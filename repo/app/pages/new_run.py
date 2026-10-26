@@ -88,7 +88,7 @@ def _build_new_run_page(nav: _Nav):
     )
     walltime_w = ipv.TextField(label="Walltime", v_model="12:00:00", outlined=True, dense=True)
     ntasks_w = ipv.TextField(label="Tasks", v_model="8", outlined=True, dense=True)
-    maxconc_w = ipv.TextField(label="Max Concurrent Jobs (Multi-CIF)", v_model="0", outlined=True,
+    maxconc_w = ipv.TextField(label="Max Structures Running at Once", v_model="0", outlined=True,
                               dense=True, placeholder="0 = no limit")
     mem_w = ipv.TextField(label="Memory Per CPU (GB)", v_model="4", outlined=True, dense=True,
                           placeholder="e.g. 4 (use 8+ for >100 atoms)")
@@ -172,6 +172,10 @@ def _build_new_run_page(nav: _Nav):
                         "Used only when Occupations is 'smearing'; QE's default is 'gaussian'.",
         id(degauss_w): "Smearing width in Ry, e.g. 0.01 to 0.05.\n"
                        "Used only when Occupations is 'smearing'.",
+        id(maxconc_w): "For Multiple CIF Files only. All CIFs are submitted together as one "
+                       "SLURM job; this sets how many of them run at the same time, and the "
+                       "rest wait in the queue and start as others finish.\n"
+                       "0 = no limit. Example: 10 CIFs with 2 → 2 run at a time.",
     })
 
     run_btn = widgets.Button(description="Submit Run", button_style="success", icon="play")

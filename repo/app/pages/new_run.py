@@ -106,14 +106,51 @@ def _build_new_run_page(nav: _Nav):
     gpus_w = ipv.TextField(label="No. of GPUs", v_model="1",
                            outlined=True, dense=True, disabled=True)
 
+    # Shared GPU: the site config's gpu.shard (SLURM shards, a share of one GPU's
+    # compute) is set by the cluster admin; empty means whole GPUs only and the
+    # field is not shown.
+    try:
+        site_shard = int(SITE["gpu"].get("shard") or 0) or None
+    except (TypeError, ValueError):
+        site_shard = None
+    gpu_share_w = ipv.Select(
+        label="GPU Sharing",
+        items=[{"text": "Shared GPU (recommended)", "value": "shared"},
+               {"text": "Whole GPU", "value": "whole"}],
+        v_model="shared" if site_shard else "whole",
+        outlined=True, dense=True, disabled=True,
+    )
+    share_forced = {"value": False}  # set to Whole because No. of GPUs > 1
+
+    def _gpu_count() -> int:
+        try:
+            return int(gpus_w.v_model or 1)
+        except (TypeError, ValueError):
+            return 1
+
+    def sync_gpu_share(*_) -> None:
+        """A shard is a share of one GPU: with 2+ GPUs the run takes whole GPUs."""
+        on = bool(use_gpu_w.v_model)
+        if _gpu_count() > 1:
+            share_forced["value"] = gpu_share_w.v_model == "shared" or share_forced["value"]
+            gpu_share_w.v_model = "whole"
+            gpu_share_w.disabled = True
+        else:
+            if share_forced["value"]:
+                gpu_share_w.v_model = "shared"
+                share_forced["value"] = False
+            gpu_share_w.disabled = not on
+
     def on_gpu_toggle(change) -> None:
         # Tasks is fixed to the GPU count (one MPI rank per GPU) in GPU mode.
         on = bool(change["new"])
         gpu_type_w.disabled = not on
         gpus_w.disabled = not on
         ntasks_w.disabled = on
+        sync_gpu_share()
 
     use_gpu_w.observe(on_gpu_toggle, names="v_model")
+    gpus_w.observe(sync_gpu_share, names="v_model")
     submitted_by_w = ipv.TextField(label="User Name *", v_model="",
                                      placeholder="e.g. jsmith", outlined=True, dense=True)
     run_id_w = ipv.TextField(label="Run ID (Optional)", v_model="",
@@ -172,6 +209,12 @@ def _build_new_run_page(nav: _Nav):
                         "Used only when Occupations is 'smearing'; QE's default is 'gaussian'.",
         id(degauss_w): "Smearing width in Ry, e.g. 0.01 to 0.05.\n"
                        "Used only when Occupations is 'smearing'.",
+        id(gpu_share_w): "Shared GPU: your run uses part of one GPU's compute, and other jobs "
+                         "may use the same GPU at the same time. Good for typical runs; it may "
+                         "be slower when the GPU is busy, and GPU memory is shared.\n"
+                         "Whole GPU: the GPU is reserved for your run. Use it for large "
+                         "structures or long relax / vc-relax runs.\n"
+                         "With 2 or more GPUs the run always takes whole GPUs.",
         id(maxconc_w): "For Multiple CIF Files only. All CIFs are submitted together as one "
                        "SLURM job; this is the most that may run at the same time.\n"
                        "Fewer may run at once if not enough GPUs or CPU cores are free.\n"
@@ -406,6 +449,8 @@ def _build_new_run_page(nav: _Nav):
             gpu=bool(use_gpu_w.v_model),
             gpu_type=(gpu_type_w.v_model or None),
             gpus=gpus_val,
+            gpu_shard=(site_shard if (use_gpu_w.v_model and gpus_val == 1
+                                      and gpu_share_w.v_model == "shared") else None),
             kpoints=kpoints_value or None,
             kpoint_separation=ksep_val,
             input_dft=(input_dft_w.v_model or "").strip() or None,
@@ -540,7 +585,7 @@ def _build_new_run_page(nav: _Nav):
     form_fields = [
         multi_cif_dir_w, cif_glob_w, calc_type_w, runs_dir_w, log_name_w, kpoints_w,
         ksep_w, pseudo_dir_w, pp_map_w, walltime_w, ntasks_w, mem_w, maxconc_w,
-        qe_cmd_w, use_gpu_w, gpu_type_w, gpus_w, submitted_by_w, run_id_w,
+        qe_cmd_w, use_gpu_w, gpu_type_w, gpus_w, gpu_share_w, submitted_by_w, run_id_w,
         vdw_corr_w, input_dft_w, ecutwfc_w, ecutrho_w, xdm_a1_w, xdm_a2_w,
         occupations_w, smearing_w, degauss_w,
     ]
@@ -637,6 +682,8 @@ def _build_new_run_page(nav: _Nav):
                 ], style_="flex:0 0 150px; max-width:150px; padding:0 16px 0 8px;"),
                 ipv.Col(children=[labeled_field(gpu_type_w)], style_="flex:0 0 240px; min-width:0; padding:0 8px;"),
                 ipv.Col(children=[labeled_field(gpus_w)], style_="flex:0 0 240px; min-width:0; padding:0 8px;"),
+                *([ipv.Col(children=[labeled_field(gpu_share_w)],
+                           style_="flex:0 0 260px; min-width:0; padding:0 8px;")] if site_shard else []),
             ], style_="margin:0 -8px; align-items:flex-start; flex-wrap:nowrap;"),
         ]
     )

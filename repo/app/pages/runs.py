@@ -285,6 +285,15 @@ def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:
     return row_box
 
 
+def _gpu_text(gpu: dict | None) -> str:
+    """'No', 'Shared (5000 shards), <type>' or '<n> x <type> (whole)'."""
+    if not gpu:
+        return "No"
+    if gpu.get("shard"):
+        return f'Shared ({gpu["shard"]} shards), {gpu.get("type") or "any"}'
+    return f'{gpu.get("count", 1)} x {gpu.get("type") or "any"} (whole)'
+
+
 def _build_runs_page(nav: _Nav):
     header = widgets.HTML(
         '<div class="advqm-page-header">'
@@ -458,10 +467,7 @@ def _build_runs_page(nav: _Nav):
             ("Pseudopotential Dir", _fmt(crystal.get("pseudo_dir"))),
             ("DFT Functional", _fmt((crystal.get("system_params") or {}).get("input_dft"))),
             ("vdW Correction", _fmt((crystal.get("system_params") or {}).get("vdw_corr"))),
-            ("GPU", _fmt(
-                f'{crystal["gpu"]["count"]} x {crystal["gpu"]["type"]}'
-                if crystal.get("gpu") else "No"
-            )),
+            ("GPU", _fmt(_gpu_text(crystal.get("gpu")))),
             ("Submitted At", _fmt(crystal.get("submitted_at"))),
             ("User Name", _fmt(st.get("submitted_by"))),
             ("Energy (kJ/mol)", _fmt_energy(qe_results.get("energy_ry"))),

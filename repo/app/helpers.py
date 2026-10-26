@@ -91,6 +91,7 @@ DEFAULTS = dict(
     gpu=False,
     gpu_type=None,
     gpus=1,
+    gpu_shard=None,
     kpoints=None,
     kpoint_separation=0.03,
     input_dft=None,

@@ -88,6 +88,7 @@ class RunContext:
         gpu: bool = False,
         gpu_type: str | None = None,
         gpus: int = 1,
+        gpu_shard: int | None = None,
     ) -> Path:
         """
         Write a SLURM script for the crystal QE calculation.
@@ -119,7 +120,14 @@ class RunContext:
             sbatch.append(f"#SBATCH --partition={res['partition']}")
         sbatch.append(f"#SBATCH --nodes={nodes}")
         if gpu:
-            gres = f"gpu:{gpu_type}:{gpus}" if gpu_type else f"gpu:{gpus}"
+            if gpu_shard:
+                # Shared GPU: a share of one GPU's compute (SLURM "shard" GRES);
+                # other jobs may use the same GPU. Memory is not divided.
+                if gpus != 1:
+                    raise RuntimeError("A shared GPU (gpu_shard) applies to exactly 1 GPU")
+                gres = f"shard:{gpu_type}:{gpu_shard}" if gpu_type else f"shard:{gpu_shard}"
+            else:
+                gres = f"gpu:{gpu_type}:{gpus}" if gpu_type else f"gpu:{gpus}"
             sbatch.append(f"#SBATCH --gres={gres}")
             ntasks = gpus  # one MPI rank per GPU
         if res["nodelist"]:

@@ -455,6 +455,14 @@ def _validate_gpu_options(args):
 
     if args.gpu and args.gpus < 1:
         return "--gpus must be >= 1"
+    shard = getattr(args, "gpu_shard", None)
+    if shard is not None:
+        if not args.gpu:
+            return "--gpu-shard requires --gpu"
+        if shard < 1:
+            return "--gpu-shard must be >= 1"
+        if args.gpus != 1:
+            return "--gpu-shard (shared GPU) applies to exactly 1 GPU; use --gpus 1 or drop --gpu-shard"
     # Image archives exist only on Docker sites; module sites use the cluster's QE.
     if SITE["launch_mode"] != "docker":
         return None
@@ -1279,12 +1287,14 @@ def _process_single_cif(cif_path, runs_dir, args):
                 gpu=args.gpu,
                 gpu_type=args.gpu_type,
                 gpus=args.gpus,
+                gpu_shard=getattr(args, "gpu_shard", None),
             )
         except Exception as e:
             logger.error(f"Failed to generate crystal SLURM script: {e}")
             return
         state["tasks"]["crystal"]["gpu"] = (
-            {"type": args.gpu_type or "any", "count": args.gpus} if args.gpu else None
+            {"type": args.gpu_type or "any", "count": args.gpus,
+             "shard": getattr(args, "gpu_shard", None)} if args.gpu else None
         )
         state["tasks"]["crystal"]["job_script"] = str(
             slurm_path.relative_to(run_ctx.run_dir)
@@ -1514,6 +1524,11 @@ def main():
         "--gpu-type", default=None, help="GPU gres type, e.g. nvidia_geforce_rtx_4090"
     )
     parser.add_argument("--gpus", type=int, default=1, help="GPUs per job (one MPI rank each)")
+    parser.add_argument(
+        "--gpu-shard", type=int, default=None,
+        help="Share one GPU: request N SLURM shards (a share of the GPU's compute) "
+             "instead of a whole GPU. Needs shard GRES on the cluster and --gpus 1.",
+    )
     parser.add_argument("--qe-command", default="pw.x", help="QE executable in the SLURM script")
 
     parser.add_argument(

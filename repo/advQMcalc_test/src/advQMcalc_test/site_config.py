@@ -27,6 +27,8 @@ Keys
                    cpus_per_task  OpenMP threads per MPI rank
                    image, image_tar              (docker mode only)
                    extra_sbatch   list of extra "#SBATCH ..." lines
+                   shard          (gpu only) SLURM shards for a shared GPU;
+                                  empty = whole GPUs only
   app            Web app defaults: upload_dir, runs_dir, pseudo_dir, and
                  gpu_types (the New Run "GPU Type" choices; each value is the
                  SLURM GRES name, e.g. "a100").
@@ -70,6 +72,8 @@ DEFAULT_SITE: dict = {
         # an admin has fixed the node.
         "exclude": "own3,own5,own10",
         "cpus_per_task": 4,
+        # own3 policy (DevOps): share GPUs; 5000 shards per job
+        "shard": 5000,
         "image": "advqm-qe-gpu:7.1",
         "image_tar": "/mnt/own6d/qe_workflow/data/gpu-build/advqm-qe-gpu-7.1.tar",
         "extra_sbatch": [],

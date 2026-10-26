@@ -178,11 +178,8 @@ def _build_new_run_page(nav: _Nav):
     run_log = widgets.Output()
     attach_log_handler(run_log)
 
-    upload_state = {"name": None}  # file currently selected for upload
-
     def clear_upload() -> None:
         upload_message.value = ""
-        upload_state["name"] = None
         # ipywidgets 7 makes FileUpload.value read-only; clear its synced
         # metadata/data. The button shows _counter as "Upload (n)", so set it
         # back to 0 (incrementing it made one sample look like several files).
@@ -204,18 +201,11 @@ def _build_new_run_page(nav: _Nav):
             name = first.get("name") if isinstance(first, dict) else None
             if not name and isinstance(new, dict):
                 name = next(iter(new), None)
-            # A new pick replaces the previous file (the widget keeps only the
-            # latest selection); say so, so it is not read as a second file.
-            prev = upload_state["name"]
-            upload_state["name"] = name
-            replaced = (f' <span class="advqm-muted">(replaces {html.escape(str(prev))})</span>'
-                        if prev and prev != name else "")
             upload_message.value = (
                 '<span style="color:#2e7d32; font-weight:600;">&#10004; '
-                f'{html.escape(str(name or "file"))}</span>{replaced}'
+                f'{html.escape(str(name or "file"))}</span>'
             )
         else:
-            upload_state["name"] = None
             upload_message.value = ""
 
     upload.observe(on_upload_change, names="value")

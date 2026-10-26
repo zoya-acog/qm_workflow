@@ -173,8 +173,7 @@ def _build_new_run_page(nav: _Nav):
         id(degauss_w): "Smearing width in Ry, e.g. 0.01 to 0.05.\n"
                        "Used only when Occupations is 'smearing'.",
         id(maxconc_w): "For Multiple CIF Files only. All CIFs are submitted together as one "
-                       "SLURM job; this is the most that may run at the same time. The rest "
-                       "wait in the queue and start as others finish.\n"
+                       "SLURM job; this is the most that may run at the same time.\n"
                        "Fewer may run at once if not enough GPUs or CPU cores are free.\n"
                        "0 = no limit. Example: 10 CIFs with 2 → at most 2 run at a time.",
     })

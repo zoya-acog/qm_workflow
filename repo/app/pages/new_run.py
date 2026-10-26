@@ -216,10 +216,11 @@ def _build_new_run_page(nav: _Nav):
                          "Whole GPU: the GPU is reserved for your run. Use it for large "
                          "structures or long relax / vc-relax runs.\n"
                          "With 2 or more GPUs the run always takes whole GPUs.",
-        id(maxconc_w): "For Multiple CIF Files only. All CIFs are submitted together as one "
-                       "SLURM job; this is the most that may run at the same time.\n"
-                       "Fewer may run at once if not enough GPUs or CPU cores are free.\n"
-                       "0 = no limit. Example: 10 CIFs with 2 → at most 2 run at a time.",
+        id(maxconc_w): "Multi-CIF only. All CIFs are submitted as a single SLURM array job. "
+                       "Set this number to cap how many run simultaneously (0 = no limit).\n"
+                       "Example: 10 CIFs with a limit of 2 → at most 2 run at a time; each "
+                       "time one finishes, the next starts.\n"
+                       "Fewer may run if not enough GPUs or CPU cores are free.",
     })
 
     run_btn = widgets.Button(description="Submit Run", button_style="success", icon="play")

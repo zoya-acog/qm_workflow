@@ -163,6 +163,68 @@ def _monitor_run(rp: Path, st: dict) -> None:
     _process_single_cif(rp, runs_dir, ns)
 
 
+# SLURM states that end a job, and the run status the backend gives each.
+_FINAL_STATUS = {"COMPLETED": "completed", "FAILED": "failed", "CANCELLED": "cancelled",
+                 "TIMEOUT": "timeout", "OUT_OF_MEMORY": "out_of_memory",
+                 "NODE_FAIL": "node_fail", "BOOT_FAIL": "boot_fail", "PREEMPTED": "preempted"}
+
+
+def _array_task_state(task_id: str) -> str | None:
+    """State of an array task that SLURM keeps no record of by itself.
+
+    Tasks that never started (still queued, or cancelled while queued) appear
+    in sacct only on the whole array's line ("104304_[1-3]  CANCELLED"), so a
+    query for "104304_1" returns nothing and the backend reports UNKNOWN. Read
+    the array's lines and use the one that covers this task."""
+    array_id, _, index = str(task_id).partition("_")
+    if not index.isdigit():
+        return None
+    try:
+        out = subprocess.run(
+            ["sacct", "-j", array_id, "-X", "-P", "-n", "-o", "JobID,State"],
+            capture_output=True, text=True, timeout=60,
+        ).stdout
+    except Exception:
+        return None
+    n = int(index)
+    for line in out.splitlines():
+        jid, _, state = line.partition("|")
+        if "_" not in jid or not state.strip():
+            continue
+        spec = jid.split("_", 1)[1].strip("[]").split("%")[0]
+        for part in spec.split(","):
+            lo, _, hi = part.partition("-")
+            if lo.isdigit() and lo and int(lo) <= n <= int(hi or lo):
+                return state.split()[0]
+    return None
+
+
+def _resolve_unknown_array_task(rp: Path) -> None:
+    """After a status check that ended with UNKNOWN for an array task, save
+    the state SLURM records for the array (PENDING or how it ended)."""
+    sf = rp / "state.json"
+    try:
+        st = json.loads(sf.read_text())
+    except Exception:
+        return
+    crystal = st.get("tasks", {}).get("crystal", {})
+    job_id = str(crystal.get("job_id") or "")
+    if crystal.get("slurm_state") != "UNKNOWN" or "_" not in job_id:
+        return
+    state = _array_task_state(job_id)
+    if state is None:
+        return
+    crystal["slurm_state"] = state
+    if state == "PENDING":
+        crystal["status"] = "pending"
+    elif state in _FINAL_STATUS and state != "COMPLETED":
+        # Never ran, so there is no QE output to validate.
+        crystal["status"] = _FINAL_STATUS[state]
+    else:
+        return  # RUNNING / COMPLETED: the backend's next check records these
+    sf.write_text(json.dumps(st, indent=2))
+
+
 def refresh_run_statuses(run_paths: list[Path]) -> None:
     """Ask SLURM for the current state of the given runs and save it (used by
     Refresh on the Dashboard and Runs pages, and when a run is opened). Runs
@@ -181,6 +243,7 @@ def refresh_run_statuses(run_paths: list[Path]) -> None:
                     _recheck_ended(rp, crystal)
                 if status_category(crystal.get("status")) in ("info", "warning"):
                     _monitor_run(rp, st)
+                    _resolve_unknown_array_task(rp)
             except Exception as e:
                 _run_log(f"Status refresh failed for {rp.name}: {e}")
 

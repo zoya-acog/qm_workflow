@@ -878,7 +878,11 @@ def _submit_array_batch(run_dirs, base_runs_dir, max_concurrent=0):
 
 def _query_slurm_job(job_id):
     result = subprocess.run(
-        ["sacct", "-j", str(job_id), "--format=State", "--noheader"],
+        # -X: the job's own state only. Without it sacct also lists job steps
+        # (.batch, .extern, or e.g. an `srun --jobid ... nvidia-smi` run inside
+        # the job), and a cancelled step would mark a running job CANCELLED.
+        # -P: no column width, so "CANCELLED by <uid>" is not cut to "CANCELLED+".
+        ["sacct", "-j", str(job_id), "-X", "-P", "--format=State", "--noheader"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

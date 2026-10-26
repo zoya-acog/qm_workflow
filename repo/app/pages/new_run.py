@@ -210,12 +210,9 @@ def _build_new_run_page(nav: _Nav):
                         "Used only when Occupations is 'smearing'; QE's default is 'gaussian'.",
         id(degauss_w): "Smearing width in Ry, e.g. 0.01 to 0.05.\n"
                        "Used only when Occupations is 'smearing'.",
-        id(gpu_share_w): "Shared GPU: your run uses part of one GPU's compute, and other jobs "
-                         "may use the same GPU at the same time. Good for typical runs; it may "
-                         "be slower when the GPU is busy, and GPU memory is shared.\n"
-                         "Whole GPU: the GPU is reserved for your run. Use it for large "
-                         "structures or long relax / vc-relax runs.\n"
-                         "With 2 or more GPUs the run always takes whole GPUs.",
+        id(gpu_share_w): f"Shared GPU: uses part of one GPU ({site_shard} Slurm shards)\n"
+                         "Whole GPU: reserves the entire GPU for this run.\n"
+                         "Applies only when No. of GPUs is 1.",
         id(maxconc_w): "Multi-CIF only. Submitted as a single Slurm array job. Set this number "
                        "to cap maximum simultaneous runs.\n"
                        "Example: If 10 total jobs are submitted with a limit of 2, it will run "

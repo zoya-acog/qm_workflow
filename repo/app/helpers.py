@@ -86,39 +86,6 @@ def build_namespace(**overrides) -> argparse.Namespace:
     return argparse.Namespace(**values)
 
 
-class WidgetLogHandler(logging.Handler):
-    """Forward logging records into an ipywidgets.Output widget."""
-
-    def __init__(self, output):
-        super().__init__()
-        self.output = output
-
-    def emit(self, record):
-        try:
-            text = self.format(record) + "\n"
-            if record.levelno >= logging.ERROR:
-                self.output.append_stderr(text)
-            else:
-                self.output.append_stdout(text)
-        except Exception:
-            pass
-
-
-def attach_log_handler(output) -> WidgetLogHandler:
-    """Attach (idempotently) a widget handler to the workflow logger."""
-    logger = logging.getLogger("advQMcalc_test")
-    logger.setLevel(logging.INFO)
-    for existing in list(logger.handlers):
-        if isinstance(existing, WidgetLogHandler):
-            logger.removeHandler(existing)
-    handler = WidgetLogHandler(output)
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    )
-    logger.addHandler(handler)
-    return handler
-
-
 _HM_TAG = re.compile(r"\s*_(space_group_name_H-M_alt|symmetry_space_group_name_H-M)\b(.*)")
 
 
@@ -286,6 +253,14 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 .widget-upload { border:1.5px dashed #c3cbd6; border-radius:8px; background:#fafbfc; }
 /* No box of its own: the Single CIF File tab already frames the upload area. */
 .advqm-file-panel { padding:6px 2px; gap:10px; }
+.advqm-monitor-col { flex:1 1 360px !important; min-width:0; padding:0 8px; }
+.advqm-log { display:flex; flex-direction:column-reverse; max-height:380px; overflow:auto;
+    border:1px solid #e1e5eb; border-radius:6px; background:#f8f9fb; margin-top:4px; }
+.advqm-log pre { margin:0; padding:8px 10px; font-size:11.5px; line-height:1.45;
+    white-space:pre-wrap; word-break:break-word; }
+.advqm-submit-msg { margin:8px 0 4px; line-height:1.6; }
+.advqm-submit-msg .ok { color:#2e7d32; font-weight:600; }
+.advqm-submit-msg .err { color:#c62828; }
 .advqm-file-panel .widget-upload,
 .advqm-file-panel .widget-upload.widget-button,
 .advqm-file-panel .widget-upload .widget-button {
@@ -612,7 +587,6 @@ __all__ = [
     "PROJECT_ROOT",
     "UPLOAD_DIR",
     "build_namespace",
-    "attach_log_handler",
     "save_uploads",
     "prepare_cifs",
     "run_in_thread",

@@ -20,13 +20,12 @@ from helpers import (
     _validate_gpu_options,
     _validate_vdw_options,
     build_namespace,
-    attach_log_handler,
     load_run_state,
     save_uploads,
     prepare_cifs,
 )
 from shared import (
-    CALC_TYPE_LABELS, DEFAULT_RUNS_DIR, _Nav, _last_run_error, _list_all_run_rows, _run_log, labeled_field,
+    CALC_TYPE_LABELS, DEFAULT_RUNS_DIR, _Nav, _last_run_error, _list_all_run_rows, labeled_field,
     remember_runs_dir,
 )
 
@@ -175,8 +174,28 @@ def _build_new_run_page(nav: _Nav):
     run_btn = widgets.Button(description="Submit Run", button_style="success", icon="play")
     reset_btn = widgets.Button(description="Reset", icon="undo")
     sample_btn = widgets.Button(description="Try Sample", icon="refresh")
-    run_log = widgets.Output()
-    attach_log_handler(run_log)
+    # Messages for the current submission only: form errors, then the outcome.
+    # Each run's detailed log is on the Runs page (⚙ → Monitor).
+    run_msg = widgets.HTML()
+    run_msg.add_class("advqm-submit-msg")
+    msg_lines: list[str] = []
+    go_runs_btn = widgets.Button(description="Go to Runs", icon="list",
+                                 layout=widgets.Layout(display="none"))
+    go_runs_btn.on_click(lambda _: nav.show("runs"))
+
+    def _say(msg: str, css: str = "") -> None:
+        text = html.escape(msg, quote=False)
+        msg_lines.append(f'<div class="{css}">{text}</div>' if css else f"<div>{text}</div>")
+        run_msg.value = "".join(msg_lines)
+
+    def _clear_msgs() -> None:
+        msg_lines.clear()
+        run_msg.value = ""
+        go_runs_btn.layout.display = "none"
+
+    def _first_line(err) -> str:
+        line = next((ln.strip() for ln in str(err).splitlines() if ln.strip()), str(err))
+        return line if len(line) <= 200 else line[:197] + "..."
 
     def clear_upload() -> None:
         upload_message.value = ""
@@ -247,19 +266,20 @@ def _build_new_run_page(nav: _Nav):
         for field in (input_dft_w, ecutwfc_w, ecutrho_w, xdm_a1_w, xdm_a2_w,
                       occupations_w, smearing_w, degauss_w):
             field.v_model = ""
-        run_log.clear_output()
-        run_log.append_stdout("Sample values loaded for Single CIF File. Click Submit Run to use the sample CIF.\n")
+        _clear_msgs()
+        _say("Sample values loaded for Single CIF File. Click Submit Run to use the sample CIF.")
 
     sample_btn.on_click(on_sample_clicked)
 
     def on_run_clicked(b: widgets.Button) -> None:
+        _clear_msgs()
         if not (submitted_by_w.v_model or "").strip():
-            _run_log("User Name is required — enter your user name (e.g. jsmith) before submitting.")
+            _say("User Name is required — enter your user name (e.g. jsmith) before submitting.")
             return
         run_label_val = (run_id_w.v_model or "").strip()
         if run_label_val:
             if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", run_label_val):
-                _run_log("Run ID may only contain letters, digits, '.', '_' and '-' (max 64 characters).")
+                _say("Run ID may only contain letters, digits, '.', '_' and '-' (max 64 characters).")
                 return
             try:
                 taken = any(
@@ -269,7 +289,7 @@ def _build_new_run_page(nav: _Nav):
             except Exception:
                 taken = False
             if taken:
-                _run_log(f"Run ID '{run_label_val}' is already used by another submission; choose a different one.")
+                _say(f"Run ID '{run_label_val}' is already used by another submission; choose a different one.")
                 return
         run_btn.disabled = True
         base_runs = Path(runs_dir_w.v_model)
@@ -282,11 +302,11 @@ def _build_new_run_page(nav: _Nav):
                 try:
                     staged = save_uploads(upload, UPLOAD_DIR)
                 except Exception as e:
-                    _run_log(f"Upload error: {e}")
+                    _say(f"Upload error: {e}")
                     run_btn.disabled = False
                     return
             if len(staged) != 1:
-                _run_log("Single CIF File accepts exactly one .cif file (or choose Try Sample).")
+                _say("Single CIF File accepts exactly one .cif file (or choose Try Sample).")
                 run_btn.disabled = False
                 return
             multi = False
@@ -295,12 +315,12 @@ def _build_new_run_page(nav: _Nav):
             # is not sandboxed to a data root. Upgrade by adding a path allowlist.
             cif_dir_text = (multi_cif_dir_w.v_model or "").strip()
             if not cif_dir_text:
-                _run_log("Enter a server-side folder path for Multiple CIF Files.")
+                _say("Enter a server-side folder path for Multiple CIF Files.")
                 run_btn.disabled = False
                 return
             cif_dir = Path(cif_dir_text)
             if not cif_dir.is_dir():
-                _run_log(f"Multiple CIF Files folder does not exist or is not a directory: {cif_dir}")
+                _say(f"Multiple CIF Files folder does not exist or is not a directory: {cif_dir}")
                 run_btn.disabled = False
                 return
             cif_glob = (cif_glob_w.v_model or "").strip() or "*.cif"
@@ -310,11 +330,11 @@ def _build_new_run_page(nav: _Nav):
                     if p.is_file() and p.suffix.lower() == ".cif"
                 )
             except (NotImplementedError, ValueError) as e:
-                _run_log(f"Invalid CIF file pattern {cif_glob!r}: {e}")
+                _say(f"Invalid CIF file pattern {cif_glob!r}: {e}")
                 run_btn.disabled = False
                 return
             if not staged:
-                _run_log(f"No CIF files matched {cif_glob!r} in {cif_dir}")
+                _say(f"No CIF files matched {cif_glob!r} in {cif_dir}")
                 run_btn.disabled = False
                 return
             multi = True
@@ -323,11 +343,11 @@ def _build_new_run_page(nav: _Nav):
         try:
             staged, prep_notes = prepare_cifs(staged, UPLOAD_DIR)
         except Exception as e:
-            _run_log(f"Could not prepare the CIF file(s): {e}")
+            _say(f"Could not prepare the CIF file(s): {e}")
             run_btn.disabled = False
             return
         for note in prep_notes:
-            _run_log(note)
+            _say(note)
         try:
             ntasks_val = int(ntasks_w.v_model)
             mem_gb = float(mem_w.v_model)
@@ -358,19 +378,19 @@ def _build_new_run_page(nav: _Nav):
                 for key, value in numeric_params.items()
             }
         except (TypeError, ValueError) as e:
-            _run_log(f"Invalid numeric parameter: {e}")
+            _say(f"Invalid numeric parameter: {e}")
             run_btn.disabled = False
             return
         ecutwfc_val = parsed_numeric.get("ecutwfc")
         ecutrho_val = parsed_numeric.get("ecutrho")
         if ecutwfc_val is not None and ecutrho_val is not None:
             if not ecutwfc_val:
-                _run_log("Wavefunction cutoff must be nonzero when Charge Density Cutoff is set.")
+                _say("Wavefunction cutoff must be nonzero when Charge Density Cutoff is set.")
                 run_btn.disabled = False
                 return
             ratio = ecutrho_val / ecutwfc_val
             if ratio < 8 or ratio > 12:
-                _run_log(
+                _say(
                     "Charge Density Cutoff must be 8 to 12 times of Wavefunction cutoff "
                     f"(got {ecutrho_val:g} / {ecutwfc_val:g} = {ratio:.2f})."
                 )
@@ -401,13 +421,13 @@ def _build_new_run_page(nav: _Nav):
 
         vdw_error = _validate_vdw_options(build_namespace(**common))
         if vdw_error:
-            _run_log(vdw_error)
+            _say(vdw_error)
             run_btn.disabled = False
             return
 
         gpu_error = _validate_gpu_options(build_namespace(**common))
         if gpu_error:
-            _run_log(gpu_error)
+            _say(gpu_error)
             run_btn.disabled = False
             return
 
@@ -440,9 +460,9 @@ def _build_new_run_page(nav: _Nav):
             return max(found, key=lambda d: d.stat().st_mtime) if found else None
 
         def work() -> None:
-            _run_log(f"Starting run for {len(staged)} CIF file(s)")
-            submitted = 0
-            failed = 0
+            _say(f"Submitting {len(staged)} CIF file(s)…")
+            failures: list[str] = []
+            job_ids: list[str] = []
             use_array = len(staged) > 1
             prepared: list[tuple] = []
             for cif in staged:
@@ -452,21 +472,17 @@ def _build_new_run_page(nav: _Nav):
                 try:
                     run_dir = _process_single_cif(cif, runs_dir, ns)
                 except Exception as e:
-                    failed += 1
                     rd = failed_run_dir(runs_dir, cif, started)
                     if rd:
                         stamp_run(rd)
-                    _run_log(f"Run failed for {cif.name}: {e}")
+                    failures.append(f"{cif.name}: {_first_line(e)}")
                     continue
                 if run_dir is None:
                     rd = failed_run_dir(runs_dir, cif, started)
                     if rd:
                         stamp_run(rd)
-                    failed += 1
-                    _run_log(
-                        f"Run failed for {cif.name} before SLURM submission; "
-                        f"see {log_name} in its run folder for details."
-                    )
+                    err = _last_run_error(rd, log_name) if rd else None
+                    failures.append(f"{cif.name}: {_first_line(err) if err else 'failed during setup'}")
                     continue
                 prepared.append((cif, Path(run_dir)))
 
@@ -483,32 +499,34 @@ def _build_new_run_page(nav: _Nav):
                     except Exception:
                         pass
                 try:
-                    array_id = _submit_array_batch(
+                    job_ids.append(str(_submit_array_batch(
                         [rd for _, rd in prepared], base_runs, maxconc_val
-                    )
-                    _run_log(
-                        f"Submitted {len(prepared)} runs as one SLURM array job {array_id}"
-                    )
+                    )))
                 except Exception as e:
-                    _run_log(f"Array submission failed: {e}")
+                    failures.append(f"SLURM array submission: {_first_line(e)}")
 
+            submitted = 0
             for cif, run_dir in prepared:
                 st = load_run_state(run_dir)
                 crystal = (st or {}).get("tasks", {}).get("crystal", {})
                 stamp_run(run_dir)
                 if crystal.get("job_id"):
                     submitted += 1
+                    if not use_array:
+                        job_ids.append(str(crystal["job_id"]))
                 else:
-                    failed += 1
                     err = _last_run_error(run_dir, log_name)
-                    if err:
-                        _run_log(f"Run failed for {cif.name}: {err}")
-                    else:
-                        _run_log(
-                            f"Run failed for {cif.name} before SLURM submission "
-                            f"(status: {crystal.get('status') or 'unknown'})."
-                        )
-            _run_log(f"Workflow batch finished: {submitted} submitted, {failed} failed.")
+                    failures.append(f"{cif.name}: {_first_line(err) if err else 'not submitted to SLURM'}")
+
+            if submitted:
+                _say(f"✔ Submitted {submitted} run(s) as SLURM job {', '.join(job_ids)}.", "ok")
+            for f in failures:
+                _say(f"✖ {f}", "err")
+            if not submitted:
+                _say("Nothing was submitted.", "err")
+            _say("Track your runs on the Runs page: click the ⚙ icon on a run to open "
+                 "Monitor, which shows its status and log.")
+            go_runs_btn.layout.display = ""
 
         def on_done() -> None:
             run_btn.disabled = False
@@ -517,8 +535,7 @@ def _build_new_run_page(nav: _Nav):
         t.start()
 
         def _check() -> None:
-            while t.is_alive():
-                pass
+            t.join()
             on_done()
 
         threading.Thread(target=_check, daemon=True).start()
@@ -541,8 +558,7 @@ def _build_new_run_page(nav: _Nav):
         input_tabs.selected_index = 0
         for w, value in initial_values:
             w.v_model = value
-        run_log.clear_output()
-        run_log.append_stdout("Ready.\n")
+        _clear_msgs()
 
     run_btn.on_click(on_run_clicked)
     reset_btn.on_click(on_reset_clicked)
@@ -648,6 +664,6 @@ def _build_new_run_page(nav: _Nav):
     actions = widgets.HBox([sample_btn, run_btn, reset_btn])
 
     return widgets.VBox(
-        [header, upload_section, params_section, additional, slurm_section, actions, run_log]
+        [header, upload_section, params_section, additional, slurm_section, actions, run_msg, go_runs_btn]
     )
 

@@ -597,6 +597,78 @@ def _effective_status_html(r: dict) -> str:
     return status_badge_html(r.get("crystal_status"))
 
 
+_LOG_LINE = re.compile(r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d \[(\w+)\] (.*)$")
+# Lines of a status check (Refresh, ⚙, Resume) that only say a step was
+# already done or is not due yet.
+_ROUTINE_LOG = re.compile(
+    r"already|skipping|not in terminal state|not validated as completed|not available yet"
+    r"|^Run directory layout initialized|^Configuration loaded|^CIF path:|^Calc type:"
+    r"|^Current state:|^Workflow step complete|^Using user-provided K_POINTS"
+)
+
+
+def run_log_file(run_path: Path) -> Path | None:
+    """The run's own log file (logs/advQMcalc.log, else the newest .log)."""
+    logs = Path(run_path) / "logs"
+    default = logs / "advQMcalc.log"
+    if default.is_file():
+        return default
+    found = sorted(logs.glob("*.log"), key=lambda f: f.stat().st_mtime) if logs.is_dir() else []
+    return found[-1] if found else None
+
+
+def condensed_run_log(text: str) -> list[str]:
+    """The run log without the routine part of status checks: each check
+    (a "Resuming run in" block) keeps only a status change, a result, a warning
+    or an error. Everything else is kept as written."""
+    out: list[str] = []
+    in_check, keep, status = False, True, None
+    for line in text.splitlines():
+        m = _LOG_LINE.match(line)
+        if not m:  # continuation of a multi-line message
+            if keep:
+                out.append(line)
+            continue
+        level, msg = m.groups()
+        if msg.startswith("Resuming run in:"):
+            in_check, keep = True, False
+            continue
+        st = re.search(r"Crystal job \S+ status: (\w+)", msg)
+        if not in_check:
+            keep = True
+            if st:
+                status = st.group(1)
+        elif msg.startswith("Workflow step complete"):
+            in_check, keep = False, False
+        elif level in ("WARNING", "ERROR"):
+            keep = True
+        elif st:
+            keep = st.group(1) != status
+            status = st.group(1)
+        else:
+            keep = not _ROUTINE_LOG.search(msg)
+        if keep:
+            out.append(line)
+    return out
+
+
+def run_log_html(run_path: Path, max_lines: int = 200) -> str:
+    """The last max_lines lines of the condensed run log, as a scrollable block
+    that opens at the newest line."""
+    f = run_log_file(run_path)
+    if f is None:
+        return '<div class="advqm-muted">No log file in this run folder yet.</div>'
+    try:
+        lines = condensed_run_log(f.read_text(errors="replace"))
+    except OSError as e:
+        return f'<div class="advqm-muted">Cannot read {html.escape(str(f))}: {html.escape(str(e))}</div>'
+    shown = lines[-max_lines:]
+    more = (f'<div class="advqm-muted">Showing the last {max_lines} of {len(lines)} lines.</div>'
+            if len(lines) > max_lines else "")
+    body = html.escape("\n".join(shown)) or "(empty)"
+    return f'{more}<div class="advqm-log"><pre>{body}</pre></div>'
+
+
 def _last_run_error(run_dir: Path, log_name: str = "advQMcalc.log") -> str | None:
     """Return the last ERROR message from a run's log file, if any.
 

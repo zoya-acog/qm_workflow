@@ -2,6 +2,7 @@
 
 import html
 import json
+import logging
 import re
 import threading
 import time
@@ -237,6 +238,34 @@ def _build_new_run_page(nav: _Nav):
         text = html.escape(msg, quote=False)
         msg_lines.append(f'<div class="{css}">{text}</div>' if css else f"<div>{text}</div>")
         run_msg.value = "".join(msg_lines)
+
+    # Workflow log, one collapsible section per submission (newest on top, older
+    # ones collapsed). A section only takes lines logged by its own submission's
+    # worker thread, so other submissions and background status checks never
+    # mix into it.
+    log_box = widgets.VBox()
+    log_box.add_class("advqm-sub-logs")
+    submission_no = {"n": 0}
+
+    class _SubmissionLog(logging.Handler):
+        def __init__(self, out: widgets.HTML):
+            super().__init__(level=logging.INFO)
+            self.out, self.lines, self.last = out, [], 0.0
+            self.thread = threading.get_ident()
+            self.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s",
+                                                datefmt="%Y-%m-%d %H:%M:%S"))
+
+        def emit(self, record):
+            if record.thread != self.thread:
+                return
+            self.lines.append(self.format(record))
+            if time.time() - self.last > 0.3:  # redraw at most ~3 times a second
+                self.show()
+
+        def show(self):
+            self.last = time.time()
+            body = html.escape("\n".join(self.lines)) or "(no log lines)"
+            self.out.value = f'<div class="advqm-log"><pre>{body}</pre></div>'
 
     def _clear_msgs() -> None:
         msg_lines.clear()
@@ -500,7 +529,7 @@ def _build_new_run_page(nav: _Nav):
                     continue
             return max(found, key=lambda d: d.stat().st_mtime) if found else None
 
-        def work() -> None:
+        def submit_all() -> str:
             _say(f"Submitting {len(staged)} CIF file(s)…")
             failures: list[str] = []
             job_ids: list[str] = []
@@ -565,9 +594,35 @@ def _build_new_run_page(nav: _Nav):
                 _say(f"✖ {f}", "err")
             if not submitted:
                 _say("Nothing was submitted.", "err")
-            _say("Track your runs on the Runs page: click the ⚙ icon on a run to open "
-                 "Monitor, which shows its status and log.")
+            _say("The log of this submission is below. Track your runs on the Runs page: "
+                 "click the ⚙ icon on a run to open Monitor.")
             go_runs_btn.layout.display = ""
+            if submitted:
+                return f"✔ job {', '.join(job_ids)}" + (f", {len(failures)} failed" if failures else "")
+            return "✖ not submitted"
+
+        def work() -> None:
+            submission_no["n"] += 1
+            n = submission_no["n"]
+            out = widgets.HTML()
+            section = widgets.Accordion(children=[out])
+            title = f"Submission {n} · {datetime.now():%H:%M:%S} · {len(staged)} CIF(s)"
+            section.set_title(0, f"{title} · running…")
+            for older in log_box.children:
+                older.selected_index = None
+            section.selected_index = 0
+            log_box.children = (section,) + tuple(log_box.children)[:9]  # keep the last 10
+            logger = logging.getLogger("advQMcalc_test")
+            logger.setLevel(logging.INFO)
+            handler = _SubmissionLog(out)
+            logger.addHandler(handler)
+            outcome = "✖ error"
+            try:
+                outcome = submit_all()
+            finally:
+                logger.removeHandler(handler)
+                handler.show()
+                section.set_title(0, f"{title} · {outcome}")
 
         def on_done() -> None:
             run_btn.disabled = False
@@ -707,6 +762,6 @@ def _build_new_run_page(nav: _Nav):
     actions = widgets.HBox([sample_btn, run_btn, reset_btn])
 
     return widgets.VBox(
-        [header, upload_section, params_section, additional, slurm_section, actions, run_msg, go_runs_btn]
+        [header, upload_section, params_section, additional, slurm_section, actions, run_msg, go_runs_btn, log_box]
     )
 

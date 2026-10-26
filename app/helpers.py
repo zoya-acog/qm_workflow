@@ -297,6 +297,12 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 .advqm-file-panel .widget-upload:hover,
 .advqm-file-panel .widget-upload.widget-button:hover,
 .advqm-file-panel .widget-upload .widget-button:hover { background:#0f56a4 !important; }
+/* The upload widget always draws "Upload (n)", n = files picked so far, although
+   only the newest file is kept. Hide that text and show a fixed label; the line
+   below the button names the file that will be used. */
+.advqm-file-panel .widget-upload { font-size:0 !important; }
+.advqm-file-panel .widget-upload i.fa { font-size:var(--jp-widgets-font-size); }
+.advqm-file-panel .widget-upload::after { content:"Upload"; font-size:var(--jp-widgets-font-size); }
 .advqm-group-title { font-size:0.72rem; font-weight:700; letter-spacing:0.09em;
     text-transform:uppercase; color:#5b6472; margin:0 0 10px; }
 .widget-text .widget-label, .widget-int .widget-label,

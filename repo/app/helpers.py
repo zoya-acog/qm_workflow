@@ -37,6 +37,35 @@ except ModuleNotFoundError as exc:
         "Install it or run from the project root."
     ) from exc
 
+# The backend adds a log-file handler for each run to the shared
+# "advQMcalc_test" logger and never removes it, so in a long app session every
+# later message (other runs, status checks) was also written into earlier runs'
+# logs. Each backend call below runs alone and drops the file handlers it
+# added, so a run's log holds only that run's lines.
+_BACKEND_LOCK = threading.RLock()
+
+
+def _own_logs(fn):
+    def call(*args, **kwargs):
+        logger = logging.getLogger("advQMcalc_test")
+        with _BACKEND_LOCK:
+            before = set(logger.handlers)
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                for h in list(logger.handlers):
+                    if h not in before and isinstance(h, logging.FileHandler):
+                        logger.removeHandler(h)
+                        h.close()
+    call.__name__ = fn.__name__
+    call.__doc__ = fn.__doc__
+    return call
+
+
+_process_single_cif = _own_logs(_process_single_cif)
+_submit_array_batch = _own_logs(_submit_array_batch)
+_reset_failed_job = _own_logs(_reset_failed_job)
+
 
 DEFAULTS = dict(
     cif=None,
@@ -253,11 +282,18 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 .widget-upload { border:1.5px dashed #c3cbd6; border-radius:8px; background:#fafbfc; }
 /* No box of its own: the Single CIF File tab already frames the upload area. */
 .advqm-file-panel { padding:6px 2px; gap:10px; }
-.advqm-monitor-col { flex:1 1 360px !important; min-width:0; padding:0 8px; }
-.advqm-log { display:flex; flex-direction:column-reverse; max-height:380px; overflow:auto;
-    border:1px solid #e1e5eb; border-radius:6px; background:#f8f9fb; margin-top:4px; }
-.advqm-log pre { margin:0; padding:8px 10px; font-size:11.5px; line-height:1.45;
-    white-space:pre-wrap; word-break:break-word; }
+/* Monitor: status | log, side by side (stacked when narrow). Both columns may
+   shrink below their content width, so nothing runs past the right edge. */
+.advqm-monitor-col { flex:1 1 0 !important; min-width:320px !important; max-width:100%;
+    box-sizing:border-box; padding:0 8px; overflow:hidden; }
+.advqm-monitor-col > * { max-width:100% !important; box-sizing:border-box; }
+.advqm-monitor-col .widget-html-content { white-space:normal !important; }
+.advqm-monitor-col .widget-dropdown { width:100% !important; }
+.advqm-log { display:flex; flex-direction:column-reverse; max-height:420px; overflow:auto;
+    border:1px solid #e1e5eb; border-radius:6px; background:#f8f9fb; margin-top:6px; }
+.advqm-log pre { margin:0; padding:8px 10px; white-space:pre-wrap; overflow-wrap:anywhere;
+    font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+    font-size:11.5px !important; line-height:1.5 !important; color:#2b3340; }
 .advqm-submit-msg { margin:8px 0 4px; line-height:1.6; }
 .advqm-submit-msg .ok { color:#2e7d32; font-weight:600; }
 .advqm-submit-msg .err { color:#c62828; }

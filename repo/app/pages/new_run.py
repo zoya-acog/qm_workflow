@@ -23,6 +23,7 @@ from helpers import (
     attach_log_handler,
     load_run_state,
     save_uploads,
+    prepare_cifs,
 )
 from shared import (
     CALC_TYPE_LABELS, DEFAULT_RUNS_DIR, _Nav, _last_run_error, _list_all_run_rows, _run_log, labeled_field,
@@ -317,6 +318,16 @@ def _build_new_run_page(nav: _Nav):
                 run_btn.disabled = False
                 return
             multi = True
+        # Spaces/special characters in file names and space-group names cif2cell
+        # cannot read are fixed in copies; the user's files are not changed.
+        try:
+            staged, prep_notes = prepare_cifs(staged, UPLOAD_DIR)
+        except Exception as e:
+            _run_log(f"Could not prepare the CIF file(s): {e}")
+            run_btn.disabled = False
+            return
+        for note in prep_notes:
+            _run_log(note)
         try:
             ntasks_val = int(ntasks_w.v_model)
             mem_gb = float(mem_w.v_model)

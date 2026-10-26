@@ -23,6 +23,9 @@ from helpers import (
     load_run_state,
     save_uploads,
     prepare_cifs,
+    check_cif_folder,
+    check_runs_dir,
+    check_pseudo_dir,
 )
 from shared import (
     CALC_TYPE_LABELS, DEFAULT_RUNS_DIR, _Nav, _last_run_error, _list_all_run_rows, labeled_field,
@@ -314,30 +317,19 @@ def _build_new_run_page(nav: _Nav):
             # Any folder readable by the server is accepted; access is not
             # restricted to a data root.
             cif_dir_text = (multi_cif_dir_w.v_model or "").strip()
-            if not cif_dir_text:
-                _say("Enter a server-side folder path for Multiple CIF Files.")
-                run_btn.disabled = False
-                return
             cif_dir = Path(cif_dir_text)
-            if not cif_dir.is_dir():
-                _say(f"Multiple CIF Files folder does not exist or is not a directory: {cif_dir}")
-                run_btn.disabled = False
-                return
             cif_glob = (cif_glob_w.v_model or "").strip() or "*.cif"
-            try:
-                staged = sorted(
-                    p for p in cif_dir.glob(cif_glob)
-                    if p.is_file() and p.suffix.lower() == ".cif"
-                )
-            except (NotImplementedError, ValueError) as e:
-                _say(f"Invalid CIF file pattern {cif_glob!r}: {e}")
-                run_btn.disabled = False
-                return
-            if not staged:
-                _say(f"No CIF files matched {cif_glob!r} in {cif_dir}")
+            staged, path_error = check_cif_folder(cif_dir_text, cif_glob)
+            if path_error:
+                _say(path_error, "err")
                 run_btn.disabled = False
                 return
             multi = True
+        for path_error in (check_runs_dir(base_runs), check_pseudo_dir(pseudo_dir_w.v_model)):
+            if path_error:
+                _say(path_error, "err")
+                run_btn.disabled = False
+                return
         # Spaces/special characters in file names and space-group names cif2cell
         # cannot read are fixed in copies; the user's files are not changed.
         try:

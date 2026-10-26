@@ -1,6 +1,7 @@
 import sys
 import argparse
 import logging
+import os
 import re
 import threading
 import uuid
@@ -182,6 +183,116 @@ def prepare_cifs(paths: list[Path], staging_dir: Path) -> tuple[list[Path], list
             notes.append(f"{name}: space group '{hm[0]}' written as '{hm[1]}' so cif2cell can read it.")
         out.append(dest)
     return out, notes
+
+
+PATH_HINT = ("Invalid or inaccessible input path. Verify that the path is correct and "
+             "that the file or folder is accessible with the required permissions.")
+
+
+def _blocked_at(path: Path) -> Path | None:
+    """The folder whose permissions stop the app from reaching path (the parent
+    of the first path component that cannot be looked up), or None."""
+    current = Path(path.anchor)
+    for part in path.parts[1:]:
+        nxt = current / part
+        try:
+            os.stat(nxt)
+        except PermissionError:
+            return current
+        except OSError:
+            return None
+        current = nxt
+    return None
+
+
+def _no_access(path: Path, what: str) -> str:
+    blocker = _blocked_at(path) or path
+    where = "" if blocker == path else f" (access is blocked at {blocker})"
+    return (f"Cannot access {what}: {path}{where}. The app does not have permission to "
+            f"read it. Ask the owner of {blocker} to grant read access, e.g. "
+            f"chmod -R g+rX {blocker}")
+
+
+def check_cif_folder(text: str, pattern: str) -> tuple[list[Path], str | None]:
+    """The CIF files to run from a server folder, or an error message saying
+    why they cannot be used (not found, no permission, no matching files...)."""
+    text = (text or "").strip()
+    if not text:
+        return [], "Enter the path of the folder that contains the CIF files."
+    folder = Path(text).expanduser()
+    if not folder.is_absolute():
+        return [], (f"Enter the full folder path on the server, starting with '/' "
+                    f"(got: {text}).")
+    try:
+        folder.stat()
+    except PermissionError:
+        return [], _no_access(folder, "folder")
+    except FileNotFoundError:
+        return [], (f"Folder not found: {folder}. Check that the path is correct; it must "
+                    "be a path on the server, not on your computer.")
+    except OSError as e:
+        return [], f"{PATH_HINT} ({folder}: {e.strerror or e})"
+    if not folder.is_dir():
+        return [], f"{folder} is a file. Enter the folder that contains the CIF files."
+    try:
+        entries = os.listdir(folder)
+    except PermissionError:
+        return [], _no_access(folder, "folder")
+    except OSError as e:
+        return [], f"{PATH_HINT} ({folder}: {e.strerror or e})"
+    if not entries:
+        return [], f"The folder is empty: {folder}"
+    try:
+        cifs = sorted(f for f in folder.glob(pattern)
+                      if f.suffix.lower() == ".cif" and f.is_file())
+    except (NotImplementedError, ValueError) as e:
+        return [], f"Invalid CIF filename pattern '{pattern}': {e}"
+    if not cifs:
+        return [], f"No CIF files matching '{pattern}' found in {folder}."
+    unreadable = []
+    for f in cifs:
+        try:
+            with open(f, "rb") as fh:
+                fh.read(1)
+        except OSError:
+            unreadable.append(f.name)
+    if unreadable:
+        names = ", ".join(unreadable[:5]) + (f" and {len(unreadable) - 5} more" if len(unreadable) > 5 else "")
+        return [], (f"Cannot read {len(unreadable)} of {len(cifs)} CIF files (permission denied): "
+                    f"{names}. Ask the owner to grant read access, e.g. chmod -R g+rX {folder}")
+    return cifs, None
+
+
+def check_runs_dir(path: Path) -> str | None:
+    """Error message when runs can't be created under path, else None."""
+    existing = Path(path)
+    while not existing.exists() and existing != existing.parent:
+        existing = existing.parent
+    if existing.exists() and not existing.is_dir():
+        return f"Runs Directory {path} is not a folder ({existing} is a file)."
+    if not os.access(existing, os.W_OK | os.X_OK):
+        return (f"Cannot write to the Runs Directory {path} (no write permission on "
+                f"{existing}). Choose a folder you can write to.")
+    return None
+
+
+def check_pseudo_dir(text: str) -> str | None:
+    """Error message when the pseudopotential folder can't be read, else None."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    folder = Path(text)
+    try:
+        os.listdir(folder)
+    except FileNotFoundError:
+        return f"Pseudopotential folder not found: {folder}. Check the Pseudopotential Dir."
+    except NotADirectoryError:
+        return f"Pseudopotential Dir {folder} is a file; enter the folder with the .UPF files."
+    except PermissionError:
+        return _no_access(folder, "pseudopotential folder")
+    except OSError as e:
+        return f"{PATH_HINT} ({folder}: {e.strerror or e})"
+    return None
 
 
 def save_uploads(upload_widget, staging_dir: Path) -> list[Path]:
@@ -625,6 +736,9 @@ __all__ = [
     "build_namespace",
     "save_uploads",
     "prepare_cifs",
+    "check_cif_folder",
+    "check_runs_dir",
+    "check_pseudo_dir",
     "run_in_thread",
     "enumerate_runs",
     "load_run_state",

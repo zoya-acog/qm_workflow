@@ -216,7 +216,10 @@ def _build_new_run_page(nav: _Nav):
         id(maxconc_w): "Multi-CIF only. Submitted as a single Slurm array job. Set this number "
                        "to cap maximum simultaneous runs.\n"
                        "Example: If 10 total jobs are submitted with a limit of 2, it will run "
-                       "in 5 sets of 2 concurrent jobs (2 × 5).",
+                       "in 5 sets of 2 concurrent jobs (2 × 5).\n"
+                       "Default 0 = no limit: all CIFs may start at the same time. How many "
+                       "actually run together then depends on the free GPUs / CPU cores on "
+                       "the cluster; the rest wait in the queue and start as resources free up.",
     })
 
     run_btn = widgets.Button(description="Submit Run", button_style="success", icon="play")

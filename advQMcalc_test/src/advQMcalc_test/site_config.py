@@ -21,6 +21,8 @@ Keys
                    partition, nodelist, exclude  (empty: line not written)
                    cpus_per_task  OpenMP threads per MPI rank
                    extra_sbatch   list of extra "#SBATCH ..." lines
+                   shard          (gpu only) SLURM shards for a shared GPU;
+                                  empty = whole GPUs only
   app            Web app defaults: upload_dir, runs_dir, pseudo_dir, and
                  gpu_types (the New Run "GPU Type" choices; each value is the
                  SLURM GRES name, e.g. "a100").
@@ -58,6 +60,8 @@ DEFAULT_SITE: dict = {
         "nodelist": "",
         "exclude": "",
         "cpus_per_task": 4,
+        # Shared GPU: SLURM shards per job (empty: whole GPUs). Needs shard GRES.
+        "shard": "",
         "extra_sbatch": [],
     },
     "app": {

@@ -56,15 +56,18 @@ grimme-d3).</li>
 <li><b>Smearing:</b> Configure occupation types (e.g., smearing, fixed), smearing method (e.g.,
 gaussian), and smearing width (degauss). These are primarily needed when system is
 metallic.</li>
-<li><b>Runs Directory:</b> Choose the output workspace folder in the Advanced Settings option,
-where run logs, input files, and state files will be saved.</li>
+<li><b>Additional Settings:</b> Enter your User Name (required) and, optionally, a Run ID.
+Runs Directory is the output workspace folder where run logs, input files, and state files
+will be saved.</li>
 <li><b>SLURM Settings:</b> Specify required Walltime (e.g., 12:00:00), Number of Core Tasks
 (e.g., 8), and Quantum ESPRESSO executable command ('pw.x' is the default and only option in
 the current version of the application).</li>
-<li><b>GPU usage:</b> To enable GPU usage, tick the 'Use GPU' box. The job will use available
-GPU resources.</li>
+<li><b>Max Structures Running at Once:</b> For multiple CIFs only, the maximum number of
+structures that run at the same time (0 = no limit).</li>
+<li><b>GPU usage:</b> To enable GPU usage, tick the 'Use GPU' box, and choose the GPU Type and
+No. of GPUs. The job will use available GPU resources.</li>
 <li><b>Submit:</b> Click 'Submit Run' to initiate input generation, staging, and SLURM job
-submission.</li>
+submission. Each submission's log appears in its own section below the form.</li>
 </ul>
 <p><b>Runs</b></p>
 <ul>

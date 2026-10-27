@@ -52,12 +52,13 @@ _ROW_COL_WIDTHS = ["9%", "14%", "9%", "13%", "16%", "10%", "11%", "6%", "6%", "6
 _TABLE_MIN_WIDTH = "1100px"  # below this the table scrolls sideways
 
 
-_ROW_COL_LABELS = ["Job ID", "Run ID", "User Name", "CIF File", "Path", "Calculation\nType", "Status", "", "", ""]
+_ROW_COL_LABELS = ["Job ID", "Run ID", "User Name", "CIF File", "Path to Input CIFs", "Calculation\nType", "Status", "", "", ""]
 
 
 # ⓘ next to the Calculation Type header: the table shows QE's own keywords, the
 # tooltip says what each one means.
 _CALC_TYPE_INFO = " " + info_icon_html(CALC_TYPE_HELP)
+_PATH_INFO = " " + info_icon_html("Available for Multiple CIF Files only.")
 
 
 _CIF_CELL_MAX = 20
@@ -318,7 +319,7 @@ def _build_runs_page(nav: _Nav):
 
     col_head = widgets.HTML(table_head_html(
         _ROW_COL_LABELS, _ROW_COL_WIDTHS, _TABLE_MIN_WIDTH,
-        info={"Calculation\nType": _CALC_TYPE_INFO},
+        info={"Path to Input CIFs": _PATH_INFO, "Calculation\nType": _CALC_TYPE_INFO},
     ))
     # As wide as the rows, so the card (header + rows) is what scrolls sideways.
     rows_box = widgets.VBox([], layout=widgets.Layout(min_width=_TABLE_MIN_WIDTH))

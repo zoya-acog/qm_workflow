@@ -22,7 +22,6 @@ from helpers import (
     status_category,
 )
 from shared import (
-    run_log_html,
     needs_slurm_check,
     refresh_run_statuses,
     runs_base_for,
@@ -53,12 +52,13 @@ _ROW_COL_WIDTHS = ["9%", "14%", "9%", "13%", "16%", "10%", "11%", "6%", "6%", "6
 _TABLE_MIN_WIDTH = "1100px"  # below this the table scrolls sideways
 
 
-_ROW_COL_LABELS = ["Job ID", "Run ID", "User Name", "CIF File", "Path", "Calculation\nType", "Status", "", "", ""]
+_ROW_COL_LABELS = ["Job ID", "Run ID", "User Name", "CIF File", "Path to Input CIFs", "Calculation\nType", "Status", "", "", ""]
 
 
 # ⓘ next to the Calculation Type header: the table shows QE's own keywords, the
 # tooltip says what each one means.
 _CALC_TYPE_INFO = " " + info_icon_html(CALC_TYPE_HELP)
+_PATH_INFO = " " + info_icon_html("Available for Multiple CIF Files only.")
 
 
 _CIF_CELL_MAX = 20
@@ -285,6 +285,15 @@ def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:
     return row_box
 
 
+def _gpu_text(gpu: dict | None) -> str:
+    """'No', 'Shared (5000 shards), <type>' or '<n> x <type> (whole)'."""
+    if not gpu:
+        return "No"
+    if gpu.get("shard"):
+        return f'Shared ({gpu["shard"]} shards), {gpu.get("type") or "any"}'
+    return f'{gpu.get("count", 1)} x {gpu.get("type") or "any"} (whole)'
+
+
 def _build_runs_page(nav: _Nav):
     header = widgets.HTML(
         '<div class="advqm-page-header">'
@@ -310,7 +319,7 @@ def _build_runs_page(nav: _Nav):
 
     col_head = widgets.HTML(table_head_html(
         _ROW_COL_LABELS, _ROW_COL_WIDTHS, _TABLE_MIN_WIDTH,
-        info={"Calculation\nType": _CALC_TYPE_INFO},
+        info={"Path to Input CIFs": _PATH_INFO, "Calculation\nType": _CALC_TYPE_INFO},
     ))
     # As wide as the rows, so the card (header + rows) is what scrolls sideways.
     rows_box = widgets.VBox([], layout=widgets.Layout(min_width=_TABLE_MIN_WIDTH))
@@ -371,8 +380,6 @@ def _build_runs_page(nav: _Nav):
         "files of the selected job to resume.</span>"
     )
     state_out = widgets.HTML()
-    log_pick_w = widgets.Dropdown(options=[], description="CIF", layout=widgets.Layout(width="100%"))
-    log_out = widgets.HTML()
 
     def _cif_name_of(cif) -> str:
         return Path(cif or "?").name
@@ -418,11 +425,6 @@ def _build_runs_page(nav: _Nav):
                 name = f"{name} ({p.name})"
             job_runs[name] = p
         _rebuild_cif_checks(job_runs)
-        # Log panel: one run at a time; a batch picks the CIF from a list.
-        options = [(name, str(p)) for name, p in sorted(job_runs.items(), key=lambda kv: kv[0].lower())]
-        log_pick_w.options = options
-        log_pick_w.layout.display = "" if len(options) > 1 else "none"
-        log_pick_w.value = str(selected_run["path"]) if any(v == str(selected_run["path"]) for _, v in options) else (options[0][1] if options else None)
         show_state()
 
     def show_state(_=None):
@@ -430,10 +432,6 @@ def _build_runs_page(nav: _Nav):
         # Plain HTML value (not an Output widget), so the auto status check can
         # redraw it safely from its background thread.
         state_out.value = "".join(_one_state_html(rp, header=len(paths) > 1) for rp in paths)
-        show_log()
-
-    def show_log(*_):
-        log_out.value = run_log_html(Path(log_pick_w.value)) if log_pick_w.value else ""
 
     def _one_state_html(rp, header=False) -> str:
         st = load_run_state(rp)
@@ -457,10 +455,7 @@ def _build_runs_page(nav: _Nav):
             ("Pseudopotential Dir", _fmt(crystal.get("pseudo_dir"))),
             ("DFT Functional", _fmt((crystal.get("system_params") or {}).get("input_dft"))),
             ("vdW Correction", _fmt((crystal.get("system_params") or {}).get("vdw_corr"))),
-            ("GPU", _fmt(
-                f'{crystal["gpu"]["count"]} x {crystal["gpu"]["type"]}'
-                if crystal.get("gpu") else "No"
-            )),
+            ("GPU", _fmt(_gpu_text(crystal.get("gpu")))),
             ("Submitted At", _fmt(crystal.get("submitted_at"))),
             ("User Name", _fmt(st.get("submitted_by"))),
             ("Energy (kJ/mol)", _fmt_energy(qe_results.get("energy_ry"))),
@@ -599,19 +594,7 @@ def _build_runs_page(nav: _Nav):
     resume_btn.on_click(on_resume)
 
     # Monitor only: run details + automatic SLURM status check (no Resume controls).
-    log_pick_w.observe(show_log, names="value")
-    monitor_status = widgets.VBox([selected_label_w, job_status, state_out])
-    monitor_status.add_class("advqm-monitor-col")
-    monitor_log = widgets.VBox([
-        widgets.HTML('<div style="font-weight:600;">Log</div>'
-                     '<div class="advqm-muted">Routine status checks are hidden; '
-                     'the Logs download in the table has the full file.</div>'),
-        log_pick_w, log_out,
-    ])
-    monitor_log.add_class("advqm-monitor-col")
-    # Side by side; stacks when the window is too narrow for both.
-    monitor_body = widgets.HBox([monitor_status, monitor_log],
-                                layout=widgets.Layout(flex_flow="row wrap", width="100%"))
+    monitor_body = widgets.VBox([selected_label_w, job_status, state_out])
     monitor_acc = widgets.Accordion(children=[monitor_body])
     monitor_acc.set_title(0, "Monitor")
     monitor_acc.selected_index = None

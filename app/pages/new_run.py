@@ -2,6 +2,7 @@
 
 import html
 import json
+import logging
 import re
 import threading
 import time
@@ -106,14 +107,51 @@ def _build_new_run_page(nav: _Nav):
     gpus_w = ipv.TextField(label="No. of GPUs", v_model="1",
                            outlined=True, dense=True, disabled=True)
 
+    # Shared GPU: the site config's gpu.shard (SLURM shards, a share of one GPU's
+    # compute) is set by the cluster admin; empty means whole GPUs only and the
+    # field is not shown.
+    try:
+        site_shard = int(SITE["gpu"].get("shard") or 0) or None
+    except (TypeError, ValueError):
+        site_shard = None
+    gpu_share_w = ipv.Select(
+        label="GPU Sharing",
+        items=[{"text": "Shared GPU", "value": "shared"},
+               {"text": "Whole GPU", "value": "whole"}],
+        v_model="shared" if site_shard else "whole",
+        outlined=True, dense=True, disabled=True,
+    )
+    share_forced = {"value": False}  # set to Whole because No. of GPUs > 1
+
+    def _gpu_count() -> int:
+        try:
+            return int(gpus_w.v_model or 1)
+        except (TypeError, ValueError):
+            return 1
+
+    def sync_gpu_share(*_) -> None:
+        """A shard is a share of one GPU: with 2+ GPUs the run takes whole GPUs."""
+        on = bool(use_gpu_w.v_model)
+        if _gpu_count() > 1:
+            share_forced["value"] = gpu_share_w.v_model == "shared" or share_forced["value"]
+            gpu_share_w.v_model = "whole"
+            gpu_share_w.disabled = True
+        else:
+            if share_forced["value"]:
+                gpu_share_w.v_model = "shared"
+                share_forced["value"] = False
+            gpu_share_w.disabled = not on
+
     def on_gpu_toggle(change) -> None:
         # Tasks is fixed to the GPU count (one MPI rank per GPU) in GPU mode.
         on = bool(change["new"])
         gpu_type_w.disabled = not on
         gpus_w.disabled = not on
         ntasks_w.disabled = on
+        sync_gpu_share()
 
     use_gpu_w.observe(on_gpu_toggle, names="v_model")
+    gpus_w.observe(sync_gpu_share, names="v_model")
     submitted_by_w = ipv.TextField(label="User Name *", v_model="",
                                      placeholder="e.g. jsmith", outlined=True, dense=True)
     run_id_w = ipv.TextField(label="Run ID (Optional)", v_model="",
@@ -172,10 +210,16 @@ def _build_new_run_page(nav: _Nav):
                         "Used only when Occupations is 'smearing'; QE's default is 'gaussian'.",
         id(degauss_w): "Smearing width in Ry, e.g. 0.01 to 0.05.\n"
                        "Used only when Occupations is 'smearing'.",
-        id(maxconc_w): "For Multiple CIF Files only. All CIFs are submitted together as one "
-                       "SLURM job; this is the most that may run at the same time.\n"
-                       "Fewer may run at once if not enough GPUs or CPU cores are free.\n"
-                       "0 = no limit. Example: 10 CIFs with 2 → at most 2 run at a time.",
+        id(gpu_share_w): f"Shared GPU: uses part of one GPU ({site_shard} Slurm shards)\n"
+                         "Whole GPU: reserves the entire GPU for this run.\n"
+                         "Applies only when No. of GPUs is 1.",
+        id(maxconc_w): "Multi-CIF only. Submitted as a single Slurm array job. Set this number "
+                       "to cap maximum simultaneous runs.\n"
+                       "Example: If 10 total jobs are submitted with a limit of 2, it will run "
+                       "in 5 sets of 2 concurrent jobs (2 × 5).\n"
+                       "Default 0 = no limit: all CIFs may start at the same time. How many "
+                       "actually run together then depends on the free GPUs / CPU cores on "
+                       "the cluster; the rest wait in the queue and start as resources free up.",
     })
 
     run_btn = widgets.Button(description="Submit Run", button_style="success", icon="play")
@@ -186,19 +230,43 @@ def _build_new_run_page(nav: _Nav):
     run_msg = widgets.HTML()
     run_msg.add_class("advqm-submit-msg")
     msg_lines: list[str] = []
-    go_runs_btn = widgets.Button(description="Go to Runs", icon="list",
-                                 layout=widgets.Layout(display="none"))
-    go_runs_btn.on_click(lambda _: nav.show("runs"))
 
     def _say(msg: str, css: str = "") -> None:
         text = html.escape(msg, quote=False)
         msg_lines.append(f'<div class="{css}">{text}</div>' if css else f"<div>{text}</div>")
         run_msg.value = "".join(msg_lines)
 
+    # Workflow log, one collapsible section per submission (newest on top, older
+    # ones collapsed). A section only takes lines logged by its own submission's
+    # worker thread, so other submissions and background status checks never
+    # mix into it.
+    log_box = widgets.VBox()
+    log_box.add_class("advqm-sub-logs")
+    submission_no = {"n": 0}
+
+    class _SubmissionLog(logging.Handler):
+        def __init__(self, out: widgets.HTML):
+            super().__init__(level=logging.INFO)
+            self.out, self.lines, self.last = out, [], 0.0
+            self.thread = threading.get_ident()
+            self.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s",
+                                                datefmt="%Y-%m-%d %H:%M:%S"))
+
+        def emit(self, record):
+            if record.thread != self.thread:
+                return
+            self.lines.append(self.format(record))
+            if time.time() - self.last > 0.3:  # redraw at most ~3 times a second
+                self.show()
+
+        def show(self):
+            self.last = time.time()
+            body = html.escape("\n".join(self.lines)) or "(no log lines)"
+            self.out.value = f'<div class="advqm-log"><pre>{body}</pre></div>'
+
     def _clear_msgs() -> None:
         msg_lines.clear()
         run_msg.value = ""
-        go_runs_btn.layout.display = "none"
 
     def _first_line(err) -> str:
         line = next((ln.strip() for ln in str(err).splitlines() if ln.strip()), str(err))
@@ -406,6 +474,8 @@ def _build_new_run_page(nav: _Nav):
             gpu=bool(use_gpu_w.v_model),
             gpu_type=(gpu_type_w.v_model or None),
             gpus=gpus_val,
+            gpu_shard=(site_shard if (use_gpu_w.v_model and gpus_val == 1
+                                      and gpu_share_w.v_model == "shared") else None),
             kpoints=kpoints_value or None,
             kpoint_separation=ksep_val,
             input_dft=(input_dft_w.v_model or "").strip() or None,
@@ -455,7 +525,7 @@ def _build_new_run_page(nav: _Nav):
                     continue
             return max(found, key=lambda d: d.stat().st_mtime) if found else None
 
-        def work() -> None:
+        def submit_all() -> str:
             _say(f"Submitting {len(staged)} CIF file(s)…")
             failures: list[str] = []
             job_ids: list[str] = []
@@ -514,15 +584,36 @@ def _build_new_run_page(nav: _Nav):
                     err = _last_run_error(run_dir, log_name)
                     failures.append(f"{cif.name}: {_first_line(err) if err else 'not submitted to SLURM'}")
 
-            if submitted:
-                _say(f"✔ Submitted {submitted} run(s) as SLURM job {', '.join(job_ids)}.", "ok")
             for f in failures:
                 _say(f"✖ {f}", "err")
             if not submitted:
                 _say("Nothing was submitted.", "err")
-            _say("Track your runs on the Runs page: click the ⚙ icon on a run to open "
-                 "Monitor, which shows its status and log.")
-            go_runs_btn.layout.display = ""
+            if submitted:
+                return f"✔ job {', '.join(job_ids)}" + (f", {len(failures)} failed" if failures else "")
+            return "✖ not submitted"
+
+        def work() -> None:
+            submission_no["n"] += 1
+            n = submission_no["n"]
+            out = widgets.HTML()
+            section = widgets.Accordion(children=[out])
+            title = f"Submission {n} · {datetime.now():%H:%M:%S} · {len(staged)} CIF(s)"
+            section.set_title(0, f"{title} · running…")
+            for older in log_box.children:
+                older.selected_index = None
+            section.selected_index = 0
+            log_box.children = (section,) + tuple(log_box.children)[:9]  # keep the last 10
+            logger = logging.getLogger("advQMcalc_test")
+            logger.setLevel(logging.INFO)
+            handler = _SubmissionLog(out)
+            logger.addHandler(handler)
+            outcome = "✖ error"
+            try:
+                outcome = submit_all()
+            finally:
+                logger.removeHandler(handler)
+                handler.show()
+                section.set_title(0, f"{title} · {outcome}")
 
         def on_done() -> None:
             run_btn.disabled = False
@@ -540,7 +631,7 @@ def _build_new_run_page(nav: _Nav):
     form_fields = [
         multi_cif_dir_w, cif_glob_w, calc_type_w, runs_dir_w, log_name_w, kpoints_w,
         ksep_w, pseudo_dir_w, pp_map_w, walltime_w, ntasks_w, mem_w, maxconc_w,
-        qe_cmd_w, use_gpu_w, gpu_type_w, gpus_w, submitted_by_w, run_id_w,
+        qe_cmd_w, use_gpu_w, gpu_type_w, gpus_w, gpu_share_w, submitted_by_w, run_id_w,
         vdw_corr_w, input_dft_w, ecutwfc_w, ecutrho_w, xdm_a1_w, xdm_a2_w,
         occupations_w, smearing_w, degauss_w,
     ]
@@ -637,6 +728,8 @@ def _build_new_run_page(nav: _Nav):
                 ], style_="flex:0 0 150px; max-width:150px; padding:0 16px 0 8px;"),
                 ipv.Col(children=[labeled_field(gpu_type_w)], style_="flex:0 0 240px; min-width:0; padding:0 8px;"),
                 ipv.Col(children=[labeled_field(gpus_w)], style_="flex:0 0 240px; min-width:0; padding:0 8px;"),
+                *([ipv.Col(children=[labeled_field(gpu_share_w)],
+                           style_="flex:0 0 260px; min-width:0; padding:0 8px;")] if site_shard else []),
             ], style_="margin:0 -8px; align-items:flex-start; flex-wrap:nowrap;"),
         ]
     )
@@ -660,7 +753,7 @@ def _build_new_run_page(nav: _Nav):
     actions = widgets.HBox([sample_btn, run_btn, reset_btn])
 
     return widgets.VBox(
-        [header, upload_section, params_section, additional, slurm_section, actions, run_msg, go_runs_btn]
+        [header, upload_section, params_section, additional, slurm_section, actions, run_msg, log_box]
     )
 
 

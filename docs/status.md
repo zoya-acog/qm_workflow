@@ -3,6 +3,7 @@
 ## Working
 
 - Single CIF and folder (SLURM array) runs; scf, relax, vc-relax; CPU and GPU.
+- Shared GPUs (SLURM shards) for 1-GPU runs: off by default (`gpu.shard` empty); see docs/gpu_slurm.md.
 - QE 7.1: benzene + DFT-D3 scf gives the same energy as QE 7.2 and 7.3.1, on CPU and GPU.
 - One configuration file, `config.yaml`, pre-filled for DeltaHPC in `config.example.yaml`; QE from a module, `srun`; the generated job script keeps every line of the advQMcalc_test 0.0.16 script.
 - Results: relative energy per molecule, Z from pymatgen, CSV / structure / QE output downloads, plots.

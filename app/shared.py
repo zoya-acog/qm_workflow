@@ -163,6 +163,68 @@ def _monitor_run(rp: Path, st: dict) -> None:
     _process_single_cif(rp, runs_dir, ns)
 
 
+# SLURM states that end a job, and the run status the backend gives each.
+_FINAL_STATUS = {"COMPLETED": "completed", "FAILED": "failed", "CANCELLED": "cancelled",
+                 "TIMEOUT": "timeout", "OUT_OF_MEMORY": "out_of_memory",
+                 "NODE_FAIL": "node_fail", "BOOT_FAIL": "boot_fail", "PREEMPTED": "preempted"}
+
+
+def _array_task_state(task_id: str) -> str | None:
+    """State of an array task that SLURM keeps no record of by itself.
+
+    Tasks that never started (still queued, or cancelled while queued) appear
+    in sacct only on the whole array's line ("104304_[1-3]  CANCELLED"), so a
+    query for "104304_1" returns nothing and the backend reports UNKNOWN. Read
+    the array's lines and use the one that covers this task."""
+    array_id, _, index = str(task_id).partition("_")
+    if not index.isdigit():
+        return None
+    try:
+        out = subprocess.run(
+            ["sacct", "-j", array_id, "-X", "-P", "-n", "-o", "JobID,State"],
+            capture_output=True, text=True, timeout=60,
+        ).stdout
+    except Exception:
+        return None
+    n = int(index)
+    for line in out.splitlines():
+        jid, _, state = line.partition("|")
+        if "_" not in jid or not state.strip():
+            continue
+        spec = jid.split("_", 1)[1].strip("[]").split("%")[0]
+        for part in spec.split(","):
+            lo, _, hi = part.partition("-")
+            if lo.isdigit() and lo and int(lo) <= n <= int(hi or lo):
+                return state.split()[0]
+    return None
+
+
+def _resolve_unknown_array_task(rp: Path) -> None:
+    """After a status check that ended with UNKNOWN for an array task, save
+    the state SLURM records for the array (PENDING or how it ended)."""
+    sf = rp / "state.json"
+    try:
+        st = json.loads(sf.read_text())
+    except Exception:
+        return
+    crystal = st.get("tasks", {}).get("crystal", {})
+    job_id = str(crystal.get("job_id") or "")
+    if crystal.get("slurm_state") != "UNKNOWN" or "_" not in job_id:
+        return
+    state = _array_task_state(job_id)
+    if state is None:
+        return
+    crystal["slurm_state"] = state
+    if state == "PENDING":
+        crystal["status"] = "pending"
+    elif state in _FINAL_STATUS and state != "COMPLETED":
+        # Never ran, so there is no QE output to validate.
+        crystal["status"] = _FINAL_STATUS[state]
+    else:
+        return  # RUNNING / COMPLETED: the backend's next check records these
+    sf.write_text(json.dumps(st, indent=2))
+
+
 def refresh_run_statuses(run_paths: list[Path]) -> None:
     """Ask SLURM for the current state of the given runs and save it (used by
     Refresh on the Dashboard and Runs pages, and when a run is opened). Runs
@@ -181,6 +243,7 @@ def refresh_run_statuses(run_paths: list[Path]) -> None:
                     _recheck_ended(rp, crystal)
                 if status_category(crystal.get("status")) in ("info", "warning"):
                     _monitor_run(rp, st)
+                    _resolve_unknown_array_task(rp)
             except Exception as e:
                 _run_log(f"Status refresh failed for {rp.name}: {e}")
 
@@ -582,94 +645,6 @@ def _effective_status_html(r: dict) -> str:
     if label == "Convergence Failed":
         return '<span class="advqm-badge advqm-badge-danger">Convergence Failed</span>'
     return status_badge_html(r.get("crystal_status"))
-
-
-_LOG_LINE = re.compile(r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d \[(\w+)\] (.*)$")
-# Lines of a status check (Refresh, ⚙, Resume) that only say a step was
-# already done or is not due yet.
-_ROUTINE_LOG = re.compile(
-    r"already|skipping|not in terminal state|not validated as completed|not available yet"
-    r"|^Run directory layout initialized|^Configuration loaded|^CIF path:|^Calc type:"
-    r"|^Current state:|^Workflow step complete|^Using user-provided K_POINTS"
-)
-
-
-def run_log_file(run_path: Path) -> Path | None:
-    """The run's own log file (logs/advQMcalc.log, else the newest .log)."""
-    logs = Path(run_path) / "logs"
-    default = logs / "advQMcalc.log"
-    if default.is_file():
-        return default
-    found = sorted(logs.glob("*.log"), key=lambda f: f.stat().st_mtime) if logs.is_dir() else []
-    return found[-1] if found else None
-
-
-def condensed_run_log(text: str, run_path: Path | None = None,
-                      job_ids: tuple = ()) -> list[str]:
-    """The run log without noise. Blocks that belong to other runs (older app
-    versions wrote them into every open run's log) are dropped, and in this
-    run's status checks ("Resuming run in" blocks) only a status change, a
-    result, a warning or an error is kept. Lines outside any block are kept
-    only when they name one of job_ids (e.g. the batch's array submission)."""
-    own = str(Path(run_path).resolve()) if run_path else None
-    out: list[str] = []
-    block = None       # None: outside a block; else "own-new", "own-check" or "other"
-    keep, status = False, None
-    for line in text.splitlines():
-        m = _LOG_LINE.match(line)
-        if not m:  # continuation of a multi-line message
-            if keep:
-                out.append(line)
-            continue
-        level, msg = m.groups()
-        start = re.match(r"(Run directory created|Resuming run in): (.*)$", msg)
-        if start:
-            mine = own is None or str(Path(start.group(2).strip()).resolve()) == own
-            block = ("own-new" if start.group(1).startswith("Run") else "own-check") if mine else "other"
-            keep = block == "own-new"
-        elif block is None:
-            keep = own is None or any(j and str(j) in msg for j in job_ids)
-        elif block == "other":
-            keep = False
-        else:
-            st = re.search(r"Crystal job \S+ status: (\w+)", msg)
-            if block == "own-new":
-                keep = True
-                if st:
-                    status = st.group(1)
-            elif level in ("WARNING", "ERROR"):
-                keep = True
-            elif st:
-                keep = st.group(1) != status
-                status = st.group(1)
-            else:
-                keep = not _ROUTINE_LOG.search(msg)
-            if block == "own-check" and msg.startswith("Workflow step complete"):
-                keep = False
-        if keep:
-            out.append(line)
-        if msg.startswith("Workflow step complete"):
-            block = None
-    return out
-
-
-def run_log_html(run_path: Path, max_lines: int = 200) -> str:
-    """The last max_lines lines of the condensed run log, as a scrollable block
-    that opens at the newest line."""
-    f = run_log_file(run_path)
-    if f is None:
-        return '<div class="advqm-muted">No log file in this run folder yet.</div>'
-    try:
-        crystal = (load_run_state(Path(run_path)) or {}).get("tasks", {}).get("crystal", {})
-        ids = tuple(str(crystal[k]) for k in ("array_job_id", "job_id") if crystal.get(k))
-        lines = condensed_run_log(f.read_text(errors="replace"), run_path, ids)
-    except OSError as e:
-        return f'<div class="advqm-muted">Cannot read {html.escape(str(f))}: {html.escape(str(e))}</div>'
-    shown = lines[-max_lines:]
-    more = (f'<div class="advqm-muted">Showing the last {max_lines} of {len(lines)} lines.</div>'
-            if len(lines) > max_lines else "")
-    body = html.escape("\n".join(shown)) or "(empty)"
-    return f'{more}<div class="advqm-log"><pre>{body}</pre></div>'
 
 
 def _last_run_error(run_dir: Path, log_name: str = "advQMcalc.log") -> str | None:

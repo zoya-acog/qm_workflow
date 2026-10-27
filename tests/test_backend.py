@@ -72,6 +72,18 @@ def test_gpu_job_runs_one_mpi_rank_per_gpu(tmp_path, monkeypatch):
     assert "srun pw.x -nk 2" in text
 
 
+def test_shared_gpu_requests_shards_of_one_gpu(tmp_path, monkeypatch):
+    text = _script(tmp_path, monkeypatch, site_file=EXAMPLE, gpu=True, gpu_type="a100", gpu_shard=5000)
+    assert "#SBATCH --gres=shard:a100:5000" in text
+    assert "#SBATCH --ntasks=1" in text
+    assert "--gres=gpu" not in text
+
+
+def test_shared_gpu_with_more_than_one_gpu_is_refused(tmp_path, monkeypatch):
+    with pytest.raises(RuntimeError, match="exactly 1 GPU"):
+        _script(tmp_path, monkeypatch, site_file=EXAMPLE, gpu=True, gpus=2, gpu_shard=5000)
+
+
 def test_module_site_loads_modules_and_uses_srun_in_scratch(tmp_path, monkeypatch):
     text = _script(tmp_path, monkeypatch, site_file=EXAMPLE, ntasks=16)
     assert "module load medsci\nmodule load quantum-espresso/7.1" in text
@@ -217,3 +229,20 @@ def test_hung_sacct_and_squeue_raise_instead_of_waiting(tmp_path, monkeypatch):
     cli, log = _fake_commands(tmp_path, monkeypatch, {"sacct": "exec sleep 10", "squeue": "exec sleep 10"})
     with pytest.raises(subprocess.TimeoutExpired):
         cli._job_state_with_fallback("123", log)
+
+
+def test_job_state_is_the_jobs_own_line_not_its_steps(tmp_path, monkeypatch):
+    # Without -X, sacct also lists steps; a cancelled step must not mark the job CANCELLED.
+    cli, _ = _fake_commands(tmp_path, monkeypatch, {"sacct": (
+        'case "$*" in *-X*) echo RUNNING ;; *) printf "RUNNING\\nCANCELLED\\n" ;; esac')})
+    assert cli._query_slurm_job("123") == "RUNNING"
+
+
+@pytest.mark.parametrize("task, state", [("900_2", "CANCELLED"), ("900_5", "PENDING"), ("900_9", None)])
+def test_array_task_that_never_started_gets_the_arrays_state(tmp_path, monkeypatch, task, state):
+    # Tasks that never started appear in sacct only on the array's line.
+    from shared import _array_task_state
+
+    _fake_commands(tmp_path, monkeypatch, {"sacct": (
+        'printf "900_1|COMPLETED\\n900_[2-3]|CANCELLED by 7158\\n900_[4-6%%2]|PENDING\\n"')})
+    assert _array_task_state(task) == state

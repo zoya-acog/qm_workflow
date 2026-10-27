@@ -4,6 +4,8 @@ A web app for crystal-structure energies: upload CIFs, and it builds Quantum ESP
 
 > **Start here:** [docs/installation.md](docs/installation.md): software, storage paths, site config, launching the app, and a verification run.
 >
+> **The app:** [docs/README.md](docs/README.md): what each page does and what happens on Submit.
+>
 > **Deeper:** [docs/vision.md](docs/vision.md) · decisions in [docs/design.md](docs/design.md) · current state in [docs/status.md](docs/status.md).
 
 ## Using it
@@ -60,5 +62,6 @@ To update a run's status and collect its results, run `advQMcalc_test --resume -
 ├── app/                                  Voila web app (app.ipynb → app_src.py, pages/)
 ├── advQMcalc_test/                       backend: CIF → QE input, SLURM jobs, results
 ├── tests/ · pytest.ini                   test_backend.py, reference job scripts
-└── docs/                                 installation · vision · design · status
+└── docs/                                 README (app overview) · installation · backend-changes ·
+                                          gpu_slurm · vision · design · status
 ```

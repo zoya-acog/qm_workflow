@@ -66,5 +66,11 @@ pseudopotentials, cutoffs, k-spacing, dispersion).
 ## Job status
 
 `sacct` on our cluster is often down. Status falls back to `squeue`; a job
-that has left the queue without an accounting record shows **ENDED** rather
-than failed.
+that has left the queue without an accounting record is saved as **ENDED**
+rather than failed, and Refresh asks `sacct` again later.
+
+`sacct -X -P` reads only the job's own line: without `-X`, a cancelled job
+step (e.g. a command run inside the job) made a running job look cancelled;
+without `-P`, "CANCELLED by <uid>" was cut to "CANCELLED+". Array tasks that
+never started have no line of their own; the app takes the state of the
+array's line that covers them (PENDING, CANCELLED, ...).

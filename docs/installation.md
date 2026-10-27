@@ -183,6 +183,7 @@ scratch) are in the SLURM job log,
 | "No pseudopotential found for element 'X'" | no file named `X.…` or `X_….UPF` in `pseudo_dir` | add the file (step 3) |
 | "Multiple pseudopotentials found for element 'X'" | two candidate files for one element | keep one per element in that folder |
 | Job fails reading pseudopotentials | `pseudo_dir` not visible from compute nodes | move it to shared storage (step 3) |
+| New Run: "Cannot access folder … access is blocked at …" | the app's user cannot read the CIF folder or a folder above it | grant read access on the named folder, e.g. `chmod -R g+rX <folder>` |
 | "cif2cell failed" | the CIF could not be converted | check the CIF in a viewer; partial occupancies and missing cell data are the usual causes |
 
 ## Appendix: what gets installed

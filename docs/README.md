@@ -36,4 +36,3 @@ results); there is no database.
 |---|---|
 | [installation.md](installation.md) | Installing, `config.yaml`, launching, troubleshooting |
 | [backend-changes.md](backend-changes.md) | Changes to the `advQMcalc_test` backend |
-| [gpu_slurm.md](gpu_slurm.md) | Shared GPUs (off by default) |

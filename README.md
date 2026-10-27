@@ -18,7 +18,7 @@ make test      # pytest suite (no QE or SLURM needed)
 make run       # app on http://127.0.0.1:8866
 ```
 
-`make help` lists every target. The map of the code is in [AGENTS.md](AGENTS.md). The backend (`advQMcalc_test/`) is client-provided; what we changed in it, and why, is in [docs/backend-changes.md](docs/backend-changes.md).
+`make help` lists every target. The backend (`advQMcalc_test/`) is client-provided; what we changed in it, and why, is in [docs/backend-changes.md](docs/backend-changes.md).
 
 ## Running it
 
@@ -55,10 +55,10 @@ To update a run's status and collect its results, run `advQMcalc_test --resume -
 ## Directory structure
 
 ```
-├── README.md · AGENTS.md · Makefile      front doors · automation contract
+├── README.md · Makefile                 front door · automation contract
 ├── requirements.txt · config.example.yaml  Python dependencies · configuration template
 ├── app/                                  Voila web app (app.ipynb → app_src.py, pages/)
 ├── advQMcalc_test/                       backend: CIF → QE input, SLURM jobs, results
 ├── tests/ · pytest.ini                   test_backend.py, reference job scripts
-└── docs/                                 README (app overview) · installation · backend-changes · gpu_slurm
+└── docs/                                 README (app overview) · installation · backend-changes
 ```

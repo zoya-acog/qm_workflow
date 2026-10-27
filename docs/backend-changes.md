@@ -97,8 +97,7 @@ enables it.
 
 Site setting `gpu.shard` in `config.yaml`: empty (default) means whole GPUs
 only; a number enables the option in the web app with that many shards. Only
-set it on a cluster whose SLURM has shards configured. Details:
-[gpu_slurm.md](gpu_slurm.md).
+set it on a cluster whose SLURM has shards configured.
 
 ## 6. Job status
 

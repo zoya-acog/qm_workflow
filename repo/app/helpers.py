@@ -577,6 +577,14 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 /* Field labels: the text spans the field's own width under its label, so it
    is never cut off at the edge of a form column. */
 .advqm-tip.advqm-tip-field { position:static; }
+/* Form sections: a field's hover text may reach over the rows below. Each
+   Vuetify row's wrapper (.vuetify-styles: overflow-x hidden, which makes the
+   y axis scroll), the form card and the accordion would otherwise cut it off
+   and turn into a small scroll box. clip keeps sideways overflow hidden
+   without making the vertical axis scrollable. */
+.advqm-section, .advqm-section .p-Collapse, .advqm-section .p-Collapse-contents,
+.advqm-section .advqm-card, .advqm-section .vuetify-styles {
+    overflow-x:clip !important; overflow-y:visible !important; }
 .advqm-tip.advqm-tip-field:hover::after { left:0; right:0; width:auto; max-width:none; }
 .advqm-btn-info:hover { opacity:1; }
 /* Runs: logs download cell. Only the button takes space; the download helper

@@ -65,10 +65,6 @@ gpu:
   nodelist: ""
   exclude: ""
   cpus_per_task: 4
-  # Shared GPU: SLURM shards a 1-GPU run requests instead of a whole GPU.
-  # Empty = whole GPUs only (the New Run "GPU Sharing" field is hidden).
-  # Set only if `sinfo -o "%N %G"` lists shard: on the GPU nodes.
-  shard: ""
   extra_sbatch: []
 
 qe_bin: pw.x             # QE executable name or full path

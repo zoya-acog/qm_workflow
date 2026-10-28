@@ -11,8 +11,6 @@ behaves as before.
 | [Geometry optimization namelists](#2-geometry-optimization-namelists-ions-and-cell) | Variable-cell optimization (vc-relax) now runs |
 | [GPU execution](#3-gpu-execution) | Calculations can run on NVIDIA GPUs |
 | [Site configuration](#4-site-configuration) | One code base runs on any SLURM cluster without code changes |
-| [Shared GPUs](#5-shared-gpus-optional) | Optional: a 1-GPU run can use part of a GPU (SLURM shards) |
-| [Job status](#6-job-status) | A running job is no longer reported as cancelled because of one of its steps |
 
 ## 1. SLURM job arrays
 
@@ -84,27 +82,6 @@ overrides with a YAML file, `config.yaml` (or any file named in the
 in the same order. The built-in defaults are neutral (no partitions or paths),
 so every real value comes from your `config.yaml` (see
 [installation.md](installation.md)).
-
-## 5. Shared GPUs (optional)
-
-A 1-GPU run can request a share of a GPU (SLURM `shard` GRES) instead of the
-whole GPU, so other jobs can use the rest of it. It is off unless the site
-enables it.
-
-| Option | Description |
-|---|---|
-| `--gpu-shard N` | Request `--gres=shard[:T]:N` instead of `--gres=gpu[:T]:1`. Needs `--gpu` and `--gpus 1` |
-
-Site setting `gpu.shard` in `config.yaml`: empty (default) means whole GPUs
-only; a number enables the option in the web app with that many shards. Only
-set it on a cluster whose SLURM has shards configured.
-
-## 6. Job status
-
-The job state is read with `sacct -X -P`. Without `-X`, sacct also lists the
-job's steps (`.batch`, `.extern`, or a command run inside the job), and a
-cancelled step made a running job show as cancelled. `-P` keeps
-"CANCELLED by <uid>" whole instead of cutting it to "CANCELLED+".
 
 ## Reviewing the changes
 

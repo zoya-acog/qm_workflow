@@ -1,5 +1,6 @@
 import sys
 import argparse
+import base64
 import logging
 import os
 import re
@@ -667,6 +668,12 @@ body { background:#f4f6f9; font-family:'Segoe UI', Roboto, 'Helvetica Neue', Ari
 """
 
 
+def _logo_uri(name: str, mime: str) -> str:
+    """A logo from app/assets/ as a data: URI, so the header needs no internet access."""
+    data = (Path(__file__).resolve().parent / "assets" / name).read_bytes()
+    return f"data:{mime};base64,{base64.b64encode(data).decode()}"
+
+
 def build_app_header() -> str:
     """HTML/CSS header banner styled after the TrueRhoVoila HubApp toolbar."""
     return f"""
@@ -686,10 +693,10 @@ def build_app_header() -> str:
 </style>
 <div class="advqm-header">
   <div class="advqm-brand">
-    <img src="https://www.aganitha.ai/wp-content/uploads/2023/05/aganitha-logo.png"
+    <img src="{_logo_uri('aganitha-logo.png', 'image/png')}"
          alt="Aganitha" style="height:32px; max-width:140px;">
     <span class="advqm-collab">× Joint Collaboration ×</span>
-    <img src="https://upload.wikimedia.org/wikipedia/commons/5/57/Pfizer_%282021%29.svg"
+    <img src="{_logo_uri('pfizer-logo.svg', 'image/svg+xml')}"
          alt="Pfizer" style="height:28px; max-width:100px;">
   </div>
   <div class="advqm-titlebar">

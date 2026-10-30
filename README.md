@@ -51,7 +51,7 @@ results); there is no database.
 ├── advQMcalc_test/           backend: CIF → QE input, SLURM jobs, results
 ├── pseudos/                  example pseudopotentials (SSSP Efficiency, PBE)
 ├── tests/                    automated tests and reference job scripts
-│   └── data/                 example polymorph CIFs (ROY, glycine)
+│   └── data/                 example polymorph CIFs (glycine)
 └── docs/
     ├── installation.md       installing, config.yaml, launching, troubleshooting
     └── backend-changes.md    changes to the advQMcalc_test backend

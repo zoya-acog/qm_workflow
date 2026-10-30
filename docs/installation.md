@@ -75,14 +75,26 @@ which cif2cell || ls .venv/bin/cif2cell
 make test                  # no QE or SLURM needed
 ```
 
-## 3. Choose the storage paths
+## 3. Set the storage paths in `config.yaml`
 
-| Setting | Holds | Must be visible from compute nodes |
-|---|---|---|
-| `app.runs_dir` | one folder per run: inputs, job script, QE output, results | **yes** (the job writes here, the app reads it back) |
-| `app.pseudo_dir` | `.UPF` pseudopotential files | **yes** (QE reads them) |
-| `app.upload_dir` | CIFs uploaded through the browser | no |
-| `workdir` | where QE runs during a job (scratch) | compute node only |
+Create your configuration file from the example, then edit the paths in it:
+
+```bash
+cp config.example.yaml config.yaml           # gitignored
+```
+
+Open `config.yaml` and replace these values, under **REQUIRED** (`app:`) and
+**CHECK** (`workdir`), with folders on your cluster:
+
+| Setting in `config.yaml` | Current value in `config.example.yaml` | Holds | Must be visible from compute nodes |
+|---|---|---|---|
+| `app.runs_dir` | `/shared/qe_workflow/runs` | one folder per run: inputs, job script, QE output, results | **yes** (the job writes here, the app reads it back) |
+| `app.pseudo_dir` | `/shared/qe_workflow/pseudos` | `.UPF` pseudopotential files | **yes** (QE reads them) |
+| `app.upload_dir` | `/shared/qe_workflow/uploads` | CIFs uploaded through the browser | no |
+| `workdir` | `/hpfs/userws/$USER/workdir/$SLURM_JOBID` (DeltaHPC scratch) | where QE runs during a job | compute node only |
+
+The `/shared/qe_workflow/...` paths are placeholders and must be changed. The
+`workdir` value is DeltaHPC's scratch; change it only on another cluster.
 
 ### Pseudopotentials
 
@@ -99,20 +111,13 @@ requires carbon (C) and hydrogen (H).
 ### Check
 
 ```bash
-ls /shared/qe_workflow/pseudos/*.UPF | head
-srun -N1 -n1 ls /shared/qe_workflow/runs     # same path from a compute node
+ls <your pseudo_dir>/*.UPF | head
+srun -N1 -n1 ls <your runs_dir>     # same path from a compute node
 ```
 
-## 4. Write the configuration
+## 4. Check the other settings
 
-All site settings live in one file, `config.yaml`:
-
-```bash
-cp config.example.yaml config.yaml           # gitignored
-```
-
-`config.example.yaml` explains every setting next to its value, in three
-sections:
+`config.yaml` explains every setting next to its value, in three sections:
 
 - **REQUIRED**: the three paths under `app` from step 3 (`runs_dir`,
   `pseudo_dir`, `upload_dir`). The app does not work without them.

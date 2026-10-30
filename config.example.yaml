@@ -4,7 +4,7 @@
 #
 # config.yaml is gitignored. To keep it elsewhere: make run CONFIG=/path/to/config.yaml
 # Pre-filled for DeltaHPC (the job script matches advQMcalc_test 0.0.16).
-# See docs/installation.md, step 4.
+# See docs/installation.md, steps 3-4.
 #
 #   REQUIRED  must be filled in; the app does not work without them.
 #   CHECK     pre-filled for DeltaHPC; change only if your cluster differs.

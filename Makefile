@@ -30,7 +30,7 @@ test: ## Run all tests
 	$(PY) -m pytest -q tests
 
 run: ## Run the web app on 127.0.0.1:PORT with the site settings in CONFIG (config.yaml)
-	@test -f "$(CONFIG)" || { echo "No $(CONFIG): copy config.example.yaml to config.yaml and fill it in (docs/installation.md, step 4)."; exit 1; }
+	@test -f "$(CONFIG)" || { echo "No $(CONFIG): copy config.example.yaml to config.yaml and fill it in (docs/installation.md, steps 3-4)."; exit 1; }
 	@# .venv/bin first on PATH: the backend runs cif2cell by name.
 	PATH="$(abspath $(VENV))/bin:$$PATH" ADVQM_SITE_CONFIG="$(abspath $(CONFIG))" $(VENV)/bin/voila --port=$(PORT) --Voila.ip=127.0.0.1 --no-browser --autoreload=False \
 	  --VoilaConfiguration.enable_nbextensions=True \

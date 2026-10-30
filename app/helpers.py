@@ -675,7 +675,7 @@ def _logo_uri(name: str, mime: str) -> str:
 
 
 def build_app_header() -> str:
-    """HTML/CSS header banner styled after the TrueRhoVoila HubApp toolbar."""
+    """HTML/CSS header banner: logos and the app title."""
     return f"""
 <style>
 .advqm-header {{

@@ -6,7 +6,7 @@ CONFIG ?= config.yaml
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
 
 .DEFAULT_GOAL := help
-.PHONY: help install skills-install build test run clean distclean version
+.PHONY: help install build test run clean distclean version
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -22,9 +22,6 @@ install: ## Create .venv, install the app, backend and test dependencies, regist
 	$(VENV)/bin/jupyter nbextension install --sys-prefix --py widgetsnbextension --overwrite >/dev/null
 	$(VENV)/bin/jupyter nbextension enable --sys-prefix --py widgetsnbextension >/dev/null
 	$(PY) -m ipykernel install --sys-prefix --name python3 --display-name "Python 3" >/dev/null
-
-skills-install: ## Restore project skills from skills-pack.lock.json
-	skills-pack update; skills-pack upgrade
 
 build: ## Byte-compile the app and backend (catches syntax errors)
 	$(PY) -m compileall -q app advQMcalc_test/src

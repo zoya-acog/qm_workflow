@@ -331,8 +331,8 @@ def trajectory_xsf(out_path) -> bytes | None:
 def energy_plot_html(energies: list[float], label: str | None = None) -> str:
     """Total Energy vs Optimisation Step plot (PNG embedded as base64).
 
-    With a label: a card in the AutoMD-OXtalS style (name above the figure, no
-    title on the figure). Without one: just the image, for a container that
+    With a label: a card with the name above the figure (no title on the
+    figure). Without one: just the image, for a container that
     already shows a title (the Results plot dialog).
     """
     try:
@@ -496,8 +496,8 @@ def labeled_field(w, style: str = "", info: str | None = None):
     """Show an ipyvuetify field's name as a plain label ABOVE the input box.
 
     Moves the widget's floating label out of the input (label becomes empty) and
-    puts the same text in a small bold caption above it, matching the field
-    labels in AutoMD-OXtalS (0.86rem / 600 / #374151). Widget and logic are
+    puts the same text in a small bold caption above it (0.86rem / 600 /
+    #374151). Widget and logic are
     otherwise untouched; fields without a label are returned as-is.
     info: optional hover text shown on an ⓘ icon next to the caption.
     """

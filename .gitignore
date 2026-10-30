@@ -2,8 +2,6 @@
 __pycache__/
 *.pyc
 *.swp
-.claude/skills/
-.agents/skills/
 
 # Local artefacts (not source)
 *.zip

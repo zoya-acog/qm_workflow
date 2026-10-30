@@ -3,8 +3,7 @@ template_widgets.py
 -------------------
 Widget library for the advQMcalc_test Voila UI.
 
-Provides the shared visual shell — a blue toolbar over a single content area,
-mirroring the HubApp pattern from the TrueRho / AutoMD-OXtalS templates.
+Provides the shared visual shell: a blue toolbar over a single content area.
 """
 
 import ipywidgets as widgets

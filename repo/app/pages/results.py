@@ -92,8 +92,38 @@ def _cif_result_metadata(row: dict) -> dict[str, str | None]:
             "_chemical_formula_structural",
         ) if tags.get(key)
     ), None)
-    return {"space_group": space_group, "cell_parameters": cell, "formula": formula,
-            "cif_path": str(cif_path)}
+    return {"space_group": _short_space_group(space_group), "cell_parameters": cell,
+            "formula": formula, "cif_path": str(cif_path)}
+
+
+@lru_cache(maxsize=1)
+def _short_hm_table() -> dict[str, str]:
+    """Every Hermann-Mauguin symbol pymatgen knows (full and short, all settings),
+    without spaces or underscores, mapped to its short symbol in the same setting."""
+    try:
+        from pymatgen.symmetry.groups import SpaceGroup
+    except Exception:
+        return {}
+    key = lambda s: s.replace(" ", "").replace("_", "").lower()
+    table: dict[str, str] = {}
+    for d in SpaceGroup.SYMM_OPS:
+        for name in (d["hermann_mauguin"], d["short_h_m"]):
+            table.setdefault(key(name), d["short_h_m"])
+    for n in range(1, 231):  # standard-setting full symbols, e.g. P 21/b 21/c 21/a
+        g = SpaceGroup.from_int_number(n)
+        table.setdefault(key(g.full_symbol), g.symbol)
+    return table
+
+
+def _short_space_group(symbol: str) -> str:
+    """The CIF's space group as its standard short symbol, keeping the CIF's
+    setting ('P 1 21/c 1' -> 'P2₁/c', 'P 21/b 21/c 21/a' -> 'Pbca', 'P 21/n'
+    stays 'P2₁/n'); the CIF text unchanged when the symbol is not recognised."""
+    key = symbol.split(":")[0].replace(" ", "").replace("_", "").lower()
+    short = _short_hm_table().get(key)
+    if not short:
+        return symbol
+    return re.sub(r"_(\d)", lambda m: "₀₁₂₃₄₅₆₇₈₉"[int(m.group(1))], short)
 
 
 def _formula_signature(formula: str | None) -> tuple[tuple[tuple[str, float], ...], float] | None:

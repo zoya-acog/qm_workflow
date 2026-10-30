@@ -81,3 +81,6 @@ overrides with a YAML file, `config.yaml` (or any file named in the
 in the same order. The built-in defaults are neutral (no partitions or paths),
 so every real value comes from your `config.yaml` (see
 [installation.md](installation.md)).
+
+
+<!-- © 2017-26. Aganitha Cognitive Solutions Private Limited. Proprietary and Confidential. -->

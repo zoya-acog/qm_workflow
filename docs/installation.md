@@ -220,3 +220,6 @@ From your cluster: Python 3.11 or newer, SLURM client commands on the app
 machine, and Quantum ESPRESSO 7.1 (`pw.x`) on the compute nodes, GPU-enabled
 for GPU runs.
 
+
+
+<!-- © 2017-26. Aganitha Cognitive Solutions Private Limited. Proprietary and Confidential. -->

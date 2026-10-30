@@ -63,3 +63,6 @@ results); there is no database.
 |---|---|
 | [docs/installation.md](docs/installation.md) | Installing, `config.yaml`, launching, troubleshooting |
 | [docs/backend-changes.md](docs/backend-changes.md) | Changes to the `advQMcalc_test` backend |
+
+
+<!-- © 2017-26. Aganitha Cognitive Solutions Private Limited. Proprietary and Confidential. -->

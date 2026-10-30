@@ -67,5 +67,8 @@ gpu:
   exclude: ""
   cpus_per_task: 4
   extra_sbatch: []
+  # GPU sharing (SLURM shards): uncomment to let a 1-GPU run use part of a GPU.
+  # Needs shard GRES on the GPU nodes. Leave commented for whole GPUs (default).
+  # shard: 5
 
 qe_bin: pw.x             # QE executable name or full path

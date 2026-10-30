@@ -34,6 +34,7 @@ app:                                    # ← fill in the three paths
   # Must be visible at this same path from the compute nodes.
   runs_dir: /shared/qe_workflow/runs
   # .UPF pseudopotential files, one per element. Visible from compute nodes.
+  # The repository's pseudos/ folder is an example set (SSSP Efficiency, PBE).
   pseudo_dir: /shared/qe_workflow/pseudos
   # CIFs uploaded through the browser (app machine only).
   upload_dir: /shared/qe_workflow/uploads

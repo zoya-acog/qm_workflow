@@ -1,31 +1,6 @@
 """Dashboard documentation content and accordion helper."""
 
-import html
-
 import ipywidgets as widgets
-from advQMcalc_test.site_config import SITE
-
-# Shown under "Contact". A site sets its own in config.yaml:
-#   app:
-#     contact:
-#       - {name: Dr. A, email: a@example.com}
-# An empty list hides the Contact section.
-_DEFAULT_CONTACTS = [
-    {"name": "Dr. Rahul Nikhar", "email": "Rahul.Nikhar@pfizer.com"},
-    {"name": "Dr. Krishnanjan Pramanik", "email": "pkrishnanjan@aganitha.ai"},
-]
-
-
-def _contact_html(contacts: list[dict]) -> str:
-    if not contacts:
-        return ""
-    people = [
-        f'{html.escape(c["name"])} at <a href="mailto:{html.escape(c["email"])}">{html.escape(c["email"])}</a>'
-        for c in contacts
-    ]
-    joined = people[0] if len(people) == 1 else ", ".join(people[:-1]) + " and " + people[-1]
-    return (f"<p><b>Contact</b></p>\n<p>Reach out to {joined} for questions related "
-            "to the application.</p>\n")
 
 _DOC_DESCRIPTION_HTML = """
 <p>This application is an automated workflow driver designed to process crystal structures from
@@ -89,7 +64,7 @@ will be saved.</li>
 the current version of the application).</li>
 <li><b>Max Structures Running at Once:</b> For multiple CIFs only, the maximum number of
 structures that run at the same time (0 = no limit).</li>
-<li><b>GPU usage:</b> To enable GPU usage, tick the 'Use GPU' box, and choose the GPU Type and
+<li><b>GPU usage:</b> To enable GPU usage, tick the 'Use GPU' box and set the
 No. of GPUs. The job will use available GPU resources.</li>
 <li><b>Submit:</b> Click 'Submit Run' to initiate input generation, staging, and SLURM job
 submission. Each submission's log appears in its own section below the form.</li>
@@ -125,10 +100,13 @@ _DOC_REFERENCES_HTML = """
 <li><a href="https://pymatgen.org/" target="_blank">pymatgen</a>: Used to identify the number of molecules (Z) in the unit cell to normalize the total DFT energy to energy per molecule to ensure a fair relative energy comparison.</li>
 <li><a href="https://www.quantum-espresso.org/Doc/INPUT_PW.html#id51" target="_blank">pw.x input description</a></li>
 </ul>
+<p><b>Contact</b></p>
+<p>Reach out to Dr. Rahul Nikhar at
+<a href="mailto:Rahul.Nikhar@pfizer.com">Rahul.Nikhar@pfizer.com</a> and
+Dr. Krishnanjan Pramanik at
+<a href="mailto:pkrishnanjan@aganitha.ai">pkrishnanjan@aganitha.ai</a> for questions related
+to the application.</p>
 """
-
-
-_DOC_REFERENCES_HTML += _contact_html(SITE.get("app", {}).get("contact", _DEFAULT_CONTACTS))
 
 
 def _doc_accordion(title: str, body_html: str) -> widgets.Accordion:

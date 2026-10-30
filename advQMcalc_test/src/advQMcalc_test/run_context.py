@@ -78,7 +78,6 @@ class RunContext:
         mem_per_cpu: str = "4G",
         qe_command: str = "pw.x",
         gpu: bool = False,
-        gpu_type: str | None = None,
         gpus: int = 1,
         gpu_shard: int | None = None,
     ) -> Path:
@@ -113,9 +112,9 @@ class RunContext:
                 # other jobs may use the same GPU. Memory is not divided.
                 if gpus != 1:
                     raise RuntimeError("A shared GPU (gpu_shard) applies to exactly 1 GPU")
-                gres = f"shard:{gpu_type}:{gpu_shard}" if gpu_type else f"shard:{gpu_shard}"
+                gres = f"shard:{gpu_shard}"
             else:
-                gres = f"gpu:{gpu_type}:{gpus}" if gpu_type else f"gpu:{gpus}"
+                gres = f"gpu:{gpus}"
             sbatch.append(f"#SBATCH --gres={gres}")
             ntasks = gpus  # one MPI rank per GPU
         if res["nodelist"]:

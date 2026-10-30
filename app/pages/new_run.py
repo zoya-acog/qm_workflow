@@ -96,14 +96,6 @@ def _build_new_run_page(nav: _Nav):
     qe_cmd_w = ipv.TextField(label="QE Command", v_model="pw.x", outlined=True, dense=True)
     use_gpu_w = ipv.Checkbox(label="Use GPU", v_model=False, dense=True, hide_details=True,
                              class_="advqm-gpu-check")
-    gpu_type_w = ipv.Select(
-        label="GPU Type",
-        items=[
-            {"text": "Any", "value": ""},
-            *SITE["app"]["gpu_types"],
-        ],
-        v_model="", outlined=True, dense=True, disabled=True,
-    )
     gpus_w = ipv.TextField(label="No. of GPUs", v_model="1",
                            outlined=True, dense=True, disabled=True)
 
@@ -145,7 +137,6 @@ def _build_new_run_page(nav: _Nav):
     def on_gpu_toggle(change) -> None:
         # Tasks is fixed to the GPU count (one MPI rank per GPU) in GPU mode.
         on = bool(change["new"])
-        gpu_type_w.disabled = not on
         gpus_w.disabled = not on
         ntasks_w.disabled = on
         sync_gpu_share()
@@ -330,7 +321,6 @@ def _build_new_run_page(nav: _Nav):
         maxconc_w.v_model = "0"
         qe_cmd_w.v_model = "pw.x"
         use_gpu_w.v_model = False
-        gpu_type_w.v_model = ""
         gpus_w.v_model = "1"
         # User Name is required: keep a name already typed, else a sample label,
         # so Submit Run works straight away. Run ID is optional and left empty.
@@ -472,7 +462,6 @@ def _build_new_run_page(nav: _Nav):
             slurm_mem_per_cpu=f"{mem_gb:g}G",
             qe_command=qe_cmd_w.v_model,
             gpu=bool(use_gpu_w.v_model),
-            gpu_type=(gpu_type_w.v_model or None),
             gpus=gpus_val,
             gpu_shard=(site_shard if (use_gpu_w.v_model and gpus_val == 1
                                       and gpu_share_w.v_model == "shared") else None),
@@ -631,7 +620,7 @@ def _build_new_run_page(nav: _Nav):
     form_fields = [
         multi_cif_dir_w, cif_glob_w, calc_type_w, runs_dir_w, log_name_w, kpoints_w,
         ksep_w, pseudo_dir_w, pp_map_w, walltime_w, ntasks_w, mem_w, maxconc_w,
-        qe_cmd_w, use_gpu_w, gpu_type_w, gpus_w, gpu_share_w, submitted_by_w, run_id_w,
+        qe_cmd_w, use_gpu_w, gpus_w, gpu_share_w, submitted_by_w, run_id_w,
         vdw_corr_w, input_dft_w, ecutwfc_w, ecutrho_w, xdm_a1_w, xdm_a2_w,
         occupations_w, smearing_w, degauss_w,
     ]
@@ -724,9 +713,8 @@ def _build_new_run_page(nav: _Nav):
                     ipv.Html(tag="div", children=[use_gpu_w],
                              style_="height:40px; display:flex; align-items:center;"),
                 # Fixed width: the Vuetify checkbox otherwise stretches to the
-                # full row and pushes the two GPU fields out of view.
+                # full row and pushes the GPU fields out of view.
                 ], style_="flex:0 0 150px; max-width:150px; padding:0 16px 0 8px;"),
-                ipv.Col(children=[labeled_field(gpu_type_w)], style_="flex:0 0 240px; min-width:0; padding:0 8px;"),
                 ipv.Col(children=[labeled_field(gpus_w)], style_="flex:0 0 240px; min-width:0; padding:0 8px;"),
                 *([ipv.Col(children=[labeled_field(gpu_share_w)],
                            style_="flex:0 0 260px; min-width:0; padding:0 8px;")] if site_shard else []),

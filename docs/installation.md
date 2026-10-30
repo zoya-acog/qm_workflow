@@ -111,18 +111,23 @@ All site settings live in one file, `config.yaml`:
 cp config.example.yaml config.yaml           # gitignored
 ```
 
-`config.example.yaml` explains every setting next to its value. Fill in
-everything under **Required**:
+`config.example.yaml` explains every setting next to its value, in three
+sections:
 
-- `modules`: what a job loads to get `pw.x` (e.g. `quantum-espresso/7.1`).
-- `launcher`: `srun` if your SLURM starts MPI programs directly; otherwise `mpirun`.
-- `workdir`: a scratch path; `$USER` and `$SLURM_JOBID` are expanded by the job.
-- `app`: the three paths from step 3, the GPU names your SLURM uses
-  (`gpu_types`, e.g. `- {text: A100, value: a100}`), and the contacts
-  shown in the app.
+- **REQUIRED**: the three paths under `app` from step 3 (`runs_dir`,
+  `pseudo_dir`, `upload_dir`). The app does not work without them.
+- **CHECK**: pre-filled for DeltaHPC; change them only if your cluster differs.
+  `modules` (what a job loads to get `pw.x`, e.g. `quantum-espresso/7.1`),
+  `launcher` (`srun` if your SLURM starts MPI programs directly, otherwise
+  `mpirun`) and `workdir` (scratch; `$USER` and `$SLURM_JOBID` are expanded by
+  the job).
+- **OPTIONAL**: safe to leave as they are. The `cpu` / `gpu` `partition`
+  (empty: SLURM's default partition), and `account` / `qos` if your site
+  requires them. Empty values are left out of the job script.
 
-Then, under **SLURM resources**, the `cpu` / `gpu` `partition`, and `account` /
-`qos` if your site requires them. Empty values are left out of the job script.
+GPU jobs request whole GPUs of any type (`--gres=gpu:N`). To restrict them to
+one kind of GPU, use a GPU-only `partition` or a line in `gpu.extra_sbatch`,
+e.g. `["#SBATCH --constraint=a100"]`.
 
 `config.example.yaml` is pre-filled with the DeltaHPC values (modules, `srun`,
 `/hpfs` scratch); keys you remove fall back to neutral built-in defaults, so

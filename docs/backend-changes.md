@@ -54,10 +54,9 @@ Quantum ESPRESSO.
 |---|---|
 | `--gpu` | Run on GPU instead of CPU |
 | `--gpus N` | Number of GPUs per job (default 1) |
-| `--gpu-type T` | Request a specific GPU type, e.g. `a100` (optional) |
 
 Each GPU is driven by one MPI rank, the configuration recommended for
-Quantum ESPRESSO on GPUs. The job requests `--gres=gpu[:T]:N` and runs
+Quantum ESPRESSO on GPUs. The job requests `--gres=gpu:N` (any free GPU in the GPU partition) and runs
 `pw.x -nk N`, which distributes k-points across the GPUs. CPU runs are
 unaffected when `--gpu` is not given.
 

@@ -66,15 +66,15 @@ def test_original_script_is_kept_line_for_line(tmp_path, monkeypatch):
 
 
 def test_gpu_job_runs_one_mpi_rank_per_gpu(tmp_path, monkeypatch):
-    text = _script(tmp_path, monkeypatch, site_file=EXAMPLE, gpu=True, gpu_type="a100", gpus=2)
-    assert "#SBATCH --gres=gpu:a100:2" in text
+    text = _script(tmp_path, monkeypatch, site_file=EXAMPLE, gpu=True, gpus=2)
+    assert "#SBATCH --gres=gpu:2" in text
     assert "#SBATCH --ntasks=2" in text
     assert "srun pw.x -nk 2" in text
 
 
 def test_shared_gpu_requests_shards_of_one_gpu(tmp_path, monkeypatch):
-    text = _script(tmp_path, monkeypatch, site_file=EXAMPLE, gpu=True, gpu_type="a100", gpu_shard=5000)
-    assert "#SBATCH --gres=shard:a100:5000" in text
+    text = _script(tmp_path, monkeypatch, site_file=EXAMPLE, gpu=True, gpu_shard=5000)
+    assert "#SBATCH --gres=shard:5000" in text
     assert "#SBATCH --ntasks=1" in text
     assert "--gres=gpu" not in text
 
@@ -116,7 +116,6 @@ def test_example_config_loads_as_a_module_site():
     site = load_site_config(EXAMPLE)
     assert site["launcher"] == "srun"
     assert site["modules"] == ["medsci", "quantum-espresso/7.1"]
-    assert site["app"]["contact"] == [{"name": "Your Name", "email": "you@example.com"}]
 
 
 def test_json_config_still_accepted(tmp_path):

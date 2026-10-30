@@ -23,9 +23,7 @@ Keys
                    extra_sbatch   list of extra "#SBATCH ..." lines
                    shard          (gpu only) SLURM shards for a shared GPU;
                                   empty = whole GPUs only
-  app            Web app defaults: upload_dir, runs_dir, pseudo_dir, and
-                 gpu_types (the New Run "GPU Type" choices; each value is the
-                 SLURM GRES name, e.g. "a100").
+  app            Web app defaults: upload_dir, runs_dir, pseudo_dir.
 """
 
 from __future__ import annotations
@@ -68,7 +66,6 @@ DEFAULT_SITE: dict = {
         "upload_dir": "uploads",
         "runs_dir": "runs",
         "pseudo_dir": "",
-        "gpu_types": [],
     },
 }
 

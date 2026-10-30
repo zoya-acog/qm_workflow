@@ -90,7 +90,6 @@ DEFAULTS = dict(
     array_max_concurrent=0,
     qe_command="pw.x",
     gpu=False,
-    gpu_type=None,
     gpus=1,
     gpu_shard=None,
     kpoints=None,

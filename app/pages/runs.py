@@ -286,12 +286,12 @@ def _run_row_widget(rows: list[dict], on_open, on_load_results) -> widgets.HBox:
 
 
 def _gpu_text(gpu: dict | None) -> str:
-    """'No', 'Shared (5000 shards), <type>' or '<n> x <type> (whole)'."""
+    """'No', 'Shared (5000 shards)' or '<n> x GPU (whole)'."""
     if not gpu:
         return "No"
     if gpu.get("shard"):
-        return f'Shared ({gpu["shard"]} shards), {gpu.get("type") or "any"}'
-    return f'{gpu.get("count", 1)} x {gpu.get("type") or "any"} (whole)'
+        return f'Shared ({gpu["shard"]} shards)'
+    return f'{gpu.get("count", 1)} x GPU (whole)'
 
 
 def _build_runs_page(nav: _Nav):

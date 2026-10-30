@@ -1261,7 +1261,6 @@ def _process_single_cif(cif_path, runs_dir, args):
                 mem_per_cpu=args.slurm_mem_per_cpu,
                 qe_command=args.qe_command,
                 gpu=args.gpu,
-                gpu_type=args.gpu_type,
                 gpus=args.gpus,
                 gpu_shard=getattr(args, "gpu_shard", None),
             )
@@ -1269,7 +1268,7 @@ def _process_single_cif(cif_path, runs_dir, args):
             logger.error(f"Failed to generate crystal SLURM script: {e}")
             return
         state["tasks"]["crystal"]["gpu"] = (
-            {"type": args.gpu_type or "any", "count": args.gpus,
+            {"count": args.gpus,
              "shard": getattr(args, "gpu_shard", None)} if args.gpu else None
         )
         state["tasks"]["crystal"]["job_script"] = str(
@@ -1496,9 +1495,6 @@ def main():
         help="Max array tasks running at once (0 = no limit)",
     )
     parser.add_argument("--gpu", action="store_true", help="Run QE on GPU (partition from the site config)")
-    parser.add_argument(
-        "--gpu-type", default=None, help="GPU gres type, e.g. a100"
-    )
     parser.add_argument("--gpus", type=int, default=1, help="GPUs per job (one MPI rank each)")
     parser.add_argument(
         "--gpu-shard", type=int, default=None,

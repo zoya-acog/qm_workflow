@@ -1,22 +1,31 @@
 # Site configuration for the QE crystal workflow app.
 #
-#   cp config.example.yaml config.yaml     # then edit, then:  make run
+#   cp config.example.yaml config.yaml     # edit, then:  make run
 #
-# One file holds every setting the app needs on your cluster. config.yaml is
-# gitignored. `make run` uses ./config.yaml; to keep it elsewhere, set
-# ADVQM_SITE_CONFIG=/path/to/config.yaml.
-#
-# Pre-filled for DeltaHPC: these values reproduce the job script of
-# advQMcalc_test 0.0.16 (module load medsci + quantum-espresso/7.1, srun pw.x,
-# /hpfs scratch). Fill in the paths, partitions and contacts marked below.
+# config.yaml is gitignored. To keep it elsewhere: make run CONFIG=/path/to/config.yaml
+# Pre-filled for DeltaHPC (the job script matches advQMcalc_test 0.0.16).
 # See docs/installation.md, step 4.
+#
+#   REQUIRED  must be filled in; the app does not work without them.
+#   CHECK     pre-filled for DeltaHPC; change only if your cluster differs.
+#   OPTIONAL  safe to leave as they are.
 
-name: deltahpc
+# ═══ REQUIRED ════════════════════════════════════════════════════════════════
 
-# ─── Required ────────────────────────────────────────────────────────────────
+app:
+  # Run folders: inputs, job scripts, QE output, results.
+  # Must be visible at this same path from the compute nodes.
+  runs_dir: /shared/qe_workflow/runs
+  # .UPF pseudopotentials, one per element. Visible from the compute nodes.
+  # The repository's pseudos/ folder is an example set (SSSP Efficiency, PBE).
+  pseudo_dir: /shared/qe_workflow/pseudos
+  # CIFs uploaded through the browser (app machine only).
+  upload_dir: /shared/qe_workflow/uploads
 
-# Modules a job loads before running pw.x. A SLURM job inherits nothing from
-# the shell that submitted it, so list everything pw.x needs.
+# ═══ CHECK ═══════════════════════════════════════════════════════════════════
+
+# Modules a job loads to get pw.x. A SLURM job inherits nothing from the shell
+# that submitted it, so list everything pw.x needs.
 modules:
   - medsci
   - quantum-espresso/7.1
@@ -24,45 +33,27 @@ modules:
 # "srun" if your SLURM starts MPI programs itself (most clusters); else "mpirun".
 launcher: srun
 
-# Where QE runs during a job (scratch). $USER and $SLURM_JOBID are expanded
-# by the job; the output file is copied back to the run folder at the end.
+# Where QE runs during a job (scratch). $USER and $SLURM_JOBID are expanded by
+# the job; the output file is copied back to the run folder at the end.
 workdir: /hpfs/userws/$USER/workdir/$SLURM_JOBID
 local_scratch: /hpfs/userws/$USER/workdir/$SLURM_JOBID/tmp
 
-app:                                    # ← fill in the three paths
-  # Run folders: inputs, job scripts, QE output, results.
-  # Must be visible at this same path from the compute nodes.
-  runs_dir: /shared/qe_workflow/runs
-  # .UPF pseudopotential files, one per element. Visible from compute nodes.
-  # The repository's pseudos/ folder is an example set (SSSP Efficiency, PBE).
-  pseudo_dir: /shared/qe_workflow/pseudos
-  # CIFs uploaded through the browser (app machine only).
-  upload_dir: /shared/qe_workflow/uploads
+# ═══ OPTIONAL ════════════════════════════════════════════════════════════════
+# Empty values are left out of the job script; SLURM then uses its defaults.
 
-  # GPU choices in the New Run form; value is your SLURM GRES name.
-  # Leave empty until GPU runs are enabled, e.g.
-  #   - {text: A100, value: a100}
-  gpu_types: []
-
-  # Shown under "References and Contacts" in the app; [] hides the section.
-  contact:
-    - {name: Your Name, email: you@example.com}
-
-# ─── SLURM resources ─────────────────────────────────────────────────────────
-# Empty values are left out of the job script.
-
-account: ""
-qos: ""
+account: ""              # #SBATCH --account, if your site charges jobs to one
+qos: ""                  # #SBATCH --qos, if your site requires one
 
 cpu:
-  partition: ""          # e.g. compute
-  nodelist: ""           # pin jobs to nodes (rarely needed)
+  partition: ""          # e.g. compute; empty = SLURM's default partition
+  nodelist: ""           # pin jobs to these nodes (rarely needed)
   exclude: ""            # nodes to avoid
   cpus_per_task: 1       # OpenMP threads per MPI rank (1 = pure MPI)
   extra_sbatch: []       # extra lines, e.g. ["#SBATCH --constraint=avx512"]
 
 gpu:
-  partition: ""          # e.g. gpu
+  partition: ""          # e.g. gpu; set it if GPUs are not in the default partition
+  # GPU jobs get whole GPUs of any type in the partition (--gres=gpu:N).
   nodelist: ""
   exclude: ""
   cpus_per_task: 4
@@ -72,3 +63,4 @@ gpu:
   # shard: 5
 
 qe_bin: pw.x             # QE executable name or full path
+name: deltahpc           # label for this site; not used by the app

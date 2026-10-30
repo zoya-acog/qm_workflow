@@ -104,9 +104,7 @@ element, 85 elements). Use it, or your own `.UPF` files, from a single directory
 on shared storage, accessible at the same path from both the application host
 and the compute nodes, and set this path as `pseudo_dir` in `config.yaml`. With
 the repository on shared storage, `pseudo_dir` can point straight at its
-`pseudos/` folder. Different pseudopotentials give different absolute energies,
-so compare only runs made with the same set. The verification run in step 6
-requires carbon (C) and hydrogen (H).
+`pseudos/` folder.
 
 ### Check
 

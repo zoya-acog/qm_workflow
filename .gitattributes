@@ -1,0 +1,7 @@
+# Code and text: LF line endings everywhere, also when checked out on Windows
+# (CRLF breaks the Makefile and shell scripts on Linux).
+* text=auto eol=lf
+# Data files are kept byte for byte as they are.
+*.cif -text
+*.upf -text
+*.UPF -text

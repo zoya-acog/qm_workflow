@@ -81,16 +81,3 @@ overrides with a YAML file, `config.yaml` (or any file named in the
 in the same order. The built-in defaults are neutral (no partitions or paths),
 so every real value comes from your `config.yaml` (see
 [installation.md](installation.md)).
-
-## Reviewing the changes
-
-The 0.0.16 sources use Windows (CRLF) line endings and this release uses Unix
-(LF) line endings, so a plain `diff` reports every line as changed. To see
-only the actual changes:
-
-```bash
-diff -r --strip-trailing-cr <path-to-0.0.16>/advQMcalc_test advQMcalc_test
-```
-
-The backend has no third-party dependencies, except PyYAML for reading
-`config.yaml`.

@@ -40,7 +40,7 @@ a SLURM login node (or any host where those commands work).
 ```bash
 python3 --version          # 3.11+
 sbatch --version && squeue -u $USER | head -1
-srun -N1 -n1 bash -lc 'module load quantum-espresso/7.1 && which pw.x'
+srun -N1 -n1 bash -lc 'module load medsci quantum-espresso/7.1 && which pw.x'   # your modules
 ```
 
 ## 2. Install the software
@@ -170,7 +170,7 @@ Pseudopotential Directory field shows your `pseudo_dir`.
 ## 6. Verify with a real run
 
 1. Click **Try Sample** (benzene, Grimme-D3), then **Submit Run**.
-2. **Runs**: the job appears and moves to COMPLETED within a few minutes on 8 cores.
+2. **Runs**: the job appears and moves to Completed within a few minutes on 8 cores.
 3. **Results**: select the run. Expect Z = 2 and a total energy in kJ/mol;
    **Download Quantum ESPRESSO Output Files** gives the `.out` file ending in `JOB DONE.`
 
@@ -195,7 +195,7 @@ scratch) are in the SLURM job log,
 | "No pseudopotential found for element 'X'" | no file named `X.…` or `X_….UPF` in `pseudo_dir` | add the file (step 3) |
 | "Multiple pseudopotentials found for element 'X'" | two candidate files for one element | keep one per element in that folder |
 | Job fails reading pseudopotentials | `pseudo_dir` not visible from compute nodes | move it to shared storage (step 3) |
-| New Run: "Cannot access folder … access is blocked at …" | the app's user cannot read the CIF folder or a folder above it | grant read access on the named folder, e.g. `chmod -R g+rX <folder>` |
+| New Calculation: "Cannot access folder … access is blocked at …" | the app's user cannot read the CIF folder or a folder above it | grant read access on the named folder, e.g. `chmod -R g+rX <folder>` |
 | "cif2cell failed" | the CIF could not be converted | check the CIF in a viewer; partial occupancies and missing cell data are the usual causes |
 
 ## Appendix: what gets installed
